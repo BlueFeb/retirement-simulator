@@ -127,13 +127,12 @@ def main():
     st.markdown("<p class='subtitle'>현재 자산과 수입·지출을 입력하면<br>"
                 "자산이 언제 고갈되는지 시뮬레이션합니다</p>", unsafe_allow_html=True)
 
-    # Sheets 상태
+    # Sheets — 에러일 때만 표시
     gsheet_ok = get_gsheet_connection() is not None
-    if gsheet_ok:
-        st.caption("✅ Google Sheets 연동")
-    else:
+    if not gsheet_ok:
         err = st.session_state.get("gsheet_error", "")
-        st.caption(f"⚠️ Sheets 미연결 — {err}" if err else "⚠️ Sheets 미연결")
+        if err:
+            st.caption(f"⚠️ Sheets 미연결 — {err}")
 
     # 프리셋 (4개 → 2x2로 모바일 대응)
     with st.expander("⚡ 빠른 시작 — 프리셋"):
