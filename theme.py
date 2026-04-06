@@ -56,6 +56,13 @@ div[data-testid="stMetric"] {
 }
 .subtitle { color: #64748b; }
 .section-divider { border-color: rgba(0,0,0,0.08); }
+
+/* 라이트 모드 배경/텍스트 강제 */
+.stApp, [data-testid="stAppViewContainer"], section[data-testid="stMain"] {
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+}
+[data-testid="stHeader"] { background-color: #ffffff !important; }
 """
 
 DARK_CSS = COMMON_CSS + """
@@ -65,6 +72,17 @@ div[data-testid="stMetric"] {
 }
 .subtitle { color: #71717a; }
 .section-divider { border-color: rgba(255,255,255,0.06); }
+
+/* 다크 모드 배경/텍스트 강제 */
+.stApp, [data-testid="stAppViewContainer"], section[data-testid="stMain"] {
+    background-color: #0c0f14 !important;
+    color: #e4e4e7 !important;
+}
+[data-testid="stHeader"] { background-color: #0c0f14 !important; }
+p, h1, h2, h3, h4, h5, h6, label, li, td, th {
+    color: #e4e4e7 !important;
+}
+.stCaption p { color: #71717a !important; }
 """
 
 def get_css(dark_mode):
