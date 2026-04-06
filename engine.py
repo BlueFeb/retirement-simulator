@@ -1,16 +1,8 @@
 """
-시뮬레이션 엔진
-- 간단/상세 모드
-- 물가상승률 차등 적용 (변동비 100%, 고정비 50%)
-- 시나리오 비교 (기본/저축추가/은퇴연장)
-- 민감도 분석 (낙관/기본/비관)
-- FIRE 지표 계산
-- 월 인출 가능액 역산
+시뮬레이션 엔진 — 안정화 버전
 """
 import pandas as pd
-import copy
 
-# ── 한국 연령·성별 평균 순자산 (2025 가계금융복지조사, 만원) ──
 AVG_NW = {
     "male":   {20:3000,25:5000,30:12000,35:20000,40:33000,45:40000,
                50:48000,55:52000,60:51900,65:45000,70:38000,75:30000,
@@ -27,6 +19,7 @@ LOAN_RATE = 4.26
 def interp_nw(age, gender):
     d = AVG_NW.get(gender, AVG_NW["male"])
     ages = sorted(d.keys())
+    age = int(age)
     if age <= ages[0]:  return d[ages[0]]
     if age >= ages[-1]: return d[ages[-1]]
     for i in range(len(ages)-1):
@@ -37,6 +30,10 @@ def interp_nw(age, gender):
 
 
 def fmt_krw(v):
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return "0원"
     if v == 0: return "0원"
     sign = "-" if v < 0 else ""
     a = abs(v)
@@ -45,7 +42,11 @@ def fmt_krw(v):
 
 
 def amount_to_korean(val_man):
-    """만원 단위 → 한글 자연어. 예: 100000 → '10억원'"""
+    """만원 단위 → 한글 자연어."""
+    try:
+        val_man = float(val_man)
+    except (TypeError, ValueError):
+        return "0원"
     if val_man == 0: return "0원"
     sign = "마이너스 " if val_man < 0 else ""
     won = abs(val_man) * 10000
@@ -57,34 +58,54 @@ def amount_to_korean(val_man):
     return sign + (" ".join(parts) + "원" if parts else f"{int(won):,}원")
 
 
+def _safe_int(v, default=0):
+    try: return int(v)
+    except (TypeError, ValueError): return default
+
+def _safe_float(v, default=0.0):
+    try: return float(v)
+    except (TypeError, ValueError): return default
+
+
 def _init_loans(loans_raw):
     ls = []
     for loan in (loans_raw or []):
-        b, r, yr = loan["amount"], loan["rate"]/100, loan["years"]
+        b = _safe_float(loan.get("amount", 0))
+        r = _safe_float(loan.get("rate", 0)) / 100
+        yr = _safe_int(loan.get("years", 0))
         mp = 0
         if b > 0 and yr > 0:
             mr = r/12; np_ = yr*12
-            mp = b*mr*((1+mr)**np_)/(((1+mr)**np_)-1) if mr > 0 else b/np_
+            if mr > 0:
+                try:
+                    mp = b*mr*((1+mr)**np_)/(((1+mr)**np_)-1)
+                except (OverflowError, ZeroDivisionError):
+                    mp = b / np_
+            else:
+                mp = b / np_
         ls.append({"bal": b, "rate": r, "mp": mp})
     return ls
 
 
 def run_simulation(p, override=None):
-    """
-    메인 시뮬레이션. override dict로 파라미터 일부 덮어쓰기 가능 (시나리오용).
-    Returns DataFrame.
-    """
     params = {**p, **(override or {})}
-    mode = params["mode"]
-    c_age = params["age"]; retire = params["retire_age"]; life = params["life_expectancy"]
-    infl = params["inflation_rate"] / 100
-    gender = params["gender"]
+    mode = params.get("mode", "simple")
+    c_age = _safe_int(params.get("age", 35))
+    retire = _safe_int(params.get("retire_age", 60))
+    life = _safe_int(params.get("life_expectancy", 85))
+    infl = _safe_float(params.get("inflation_rate", 2.5)) / 100
+    gender = params.get("gender", "male")
+
+    if c_age >= life:
+        return pd.DataFrame([{"age":c_age,"year":2026,"net_worth":0,"avg_peer":interp_nw(c_age,gender)}])
+
     rows = []
 
     if mode == "simple":
-        nw = params["total_savings"]
-        m_inc = params["monthly_income"]; m_exp = params["monthly_expense"]
-        avg_ret = params.get("avg_return", 4.0) / 100
+        nw = _safe_float(params.get("total_savings", 0))
+        m_inc = _safe_float(params.get("monthly_income", 0))
+        m_exp = _safe_float(params.get("monthly_expense", 0))
+        avg_ret = _safe_float(params.get("avg_return", 4.0)) / 100
 
         for y in range(c_age, life+1):
             el = y - c_age
@@ -94,14 +115,20 @@ def run_simulation(p, override=None):
             ann_exp = m_exp*12*((1+infl)**el)
             nw = nw + ann_inc - ann_exp + nw*avg_ret
     else:
-        dep = params["deposit_amount"]; stk = params["stock_amount"]
-        re_ = params["real_estate_amount"]; oth = params["other_assets"]
-        dR = params["deposit_rate"]/100; sR = params["stock_return"]/100
-        rR = params["real_estate_return"]/100
-        mSal = params["salary"]; mSide = params["side_income"]
-        mPen = params["pension_monthly"]; penS = params["pension_start_age"]
-        mFix = params["fixed_cost"]; mVar = params["variable_cost"]
-        svR = params["savings_rate"]/100
+        dep = _safe_float(params.get("deposit_amount", 0))
+        stk = _safe_float(params.get("stock_amount", 0))
+        re_ = _safe_float(params.get("real_estate_amount", 0))
+        oth = _safe_float(params.get("other_assets", 0))
+        dR = _safe_float(params.get("deposit_rate", DEP_RATE)) / 100
+        sR = _safe_float(params.get("stock_return", 7)) / 100
+        rR = _safe_float(params.get("real_estate_return", 3)) / 100
+        mSal = _safe_float(params.get("salary", 0))
+        mSide = _safe_float(params.get("side_income", 0))
+        mPen = _safe_float(params.get("pension_monthly", 0))
+        penS = _safe_int(params.get("pension_start_age", 65))
+        mFix = _safe_float(params.get("fixed_cost", 0))
+        mVar = _safe_float(params.get("variable_cost", 0))
+        svR = _safe_float(params.get("savings_rate", 30)) / 100
 
         ls = _init_loans(params.get("loans"))
 
@@ -141,7 +168,9 @@ def run_simulation(p, override=None):
 
 
 def get_key_metrics(df, life_exp):
-    """핵심 지표 추출."""
+    if df.empty:
+        return None, {"net_worth":0,"age":0,"year":2026}, {"net_worth":0,"avg_peer":0}
+
     dep_df = df[df["net_worth"] <= 0].head(1)
     dep_info = None
     if not dep_df.empty:
@@ -157,127 +186,94 @@ def get_key_metrics(df, life_exp):
 
 
 def run_scenarios(params):
-    """3가지 시나리오 비교."""
     base = run_simulation(params)
-
-    # 시나리오 2: 월 50만원 추가 저축
-    if params["mode"] == "simple":
-        s2 = run_simulation(params, {"monthly_expense": params["monthly_expense"] - 50})
+    if params.get("mode") == "simple":
+        s2 = run_simulation(params, {"monthly_expense": max(0, _safe_float(params.get("monthly_expense",0)) - 50)})
     else:
-        s2 = run_simulation(params, {"savings_rate": min(params["savings_rate"] + 15, 100)})
-
-    # 시나리오 3: 은퇴 3년 연장
-    s3 = run_simulation(params, {"retire_age": params["retire_age"] + 3})
-
+        s2 = run_simulation(params, {"savings_rate": min(_safe_float(params.get("savings_rate",30)) + 15, 100)})
+    s3 = run_simulation(params, {"retire_age": _safe_int(params.get("retire_age",60)) + 3})
     return base, s2, s3
 
 
 def run_sensitivity(params):
-    """민감도 분석: 낙관/기본/비관."""
     base = run_simulation(params)
-
-    if params["mode"] == "simple":
-        optimistic = run_simulation(params, {
-            "inflation_rate": max(params["inflation_rate"] - 1, 0),
-        })
-        pessimistic = run_simulation(params, {
-            "inflation_rate": params["inflation_rate"] + 1.5,
-        })
+    ir = _safe_float(params.get("inflation_rate", 2.5))
+    if params.get("mode") == "simple":
+        opt = run_simulation(params, {"inflation_rate": max(ir - 1, 0)})
+        pess = run_simulation(params, {"inflation_rate": ir + 1.5})
     else:
-        optimistic = run_simulation(params, {
-            "stock_return": params["stock_return"] + 2,
-            "real_estate_return": params["real_estate_return"] + 1,
-            "inflation_rate": max(params["inflation_rate"] - 1, 0),
-        })
-        pessimistic = run_simulation(params, {
-            "stock_return": max(params["stock_return"] - 3, -5),
-            "real_estate_return": max(params["real_estate_return"] - 2, -5),
-            "inflation_rate": params["inflation_rate"] + 1.5,
-        })
-
-    return optimistic, base, pessimistic
+        sr = _safe_float(params.get("stock_return", 7))
+        rr = _safe_float(params.get("real_estate_return", 3))
+        opt = run_simulation(params, {"stock_return":sr+2, "real_estate_return":rr+1, "inflation_rate":max(ir-1,0)})
+        pess = run_simulation(params, {"stock_return":max(sr-3,-5), "real_estate_return":max(rr-2,-5), "inflation_rate":ir+1.5})
+    return opt, base, pess
 
 
 def calc_fire_index(params):
-    """FIRE 지표: 연 지출의 25배 도달까지 남은 연수."""
-    if params["mode"] == "simple":
-        annual_exp = params["monthly_expense"] * 12
-        current_nw = params["total_savings"]
-        monthly_save = params["monthly_income"] - params["monthly_expense"]
-    else:
-        annual_exp = (params["fixed_cost"] + params["variable_cost"]) * 12
-        current_nw = (params["deposit_amount"] + params["stock_amount"]
-                      + params["real_estate_amount"] + params["other_assets"]
-                      - sum(l["amount"] for l in params.get("loans", [])))
-        monthly_save = (params["salary"] + params["side_income"]
-                        - params["fixed_cost"] - params["variable_cost"])
+    try:
+        if params.get("mode") == "simple":
+            annual_exp = _safe_float(params.get("monthly_expense",0)) * 12
+            current_nw = _safe_float(params.get("total_savings",0))
+            monthly_save = _safe_float(params.get("monthly_income",0)) - _safe_float(params.get("monthly_expense",0))
+        else:
+            annual_exp = (_safe_float(params.get("fixed_cost",0)) + _safe_float(params.get("variable_cost",0))) * 12
+            current_nw = (_safe_float(params.get("deposit_amount",0)) + _safe_float(params.get("stock_amount",0))
+                          + _safe_float(params.get("real_estate_amount",0)) + _safe_float(params.get("other_assets",0))
+                          - sum(_safe_float(l.get("amount",0)) for l in params.get("loans", [])))
+            monthly_save = (_safe_float(params.get("salary",0)) + _safe_float(params.get("side_income",0))
+                            - _safe_float(params.get("fixed_cost",0)) - _safe_float(params.get("variable_cost",0)))
 
-    fire_target = annual_exp * 25
-    if current_nw >= fire_target:
-        return {"target": fire_target, "current": current_nw,
-                "progress": 100, "years_left": 0, "monthly_save": monthly_save}
+        fire_target = annual_exp * 25
+        if fire_target <= 0:
+            return {"target":0, "current":current_nw, "progress":100, "years_left":0, "monthly_save":monthly_save}
+        if current_nw >= fire_target:
+            return {"target":fire_target, "current":current_nw, "progress":100, "years_left":0, "monthly_save":monthly_save}
+        if monthly_save <= 0:
+            progress = round(current_nw/fire_target*100, 1) if fire_target > 0 else 0
+            return {"target":fire_target, "current":current_nw, "progress":progress, "years_left":-1, "monthly_save":monthly_save}
 
-    if monthly_save <= 0:
-        return {"target": fire_target, "current": current_nw,
-                "progress": round(current_nw/fire_target*100, 1),
-                "years_left": -1, "monthly_save": monthly_save}
-
-    # 복리 계산으로 도달 연수 추정
-    avg_return = 0.05
-    years = 0
-    nw = current_nw
-    while nw < fire_target and years < 100:
-        nw = nw * (1 + avg_return) + monthly_save * 12
-        years += 1
-
-    return {"target": fire_target, "current": current_nw,
-            "progress": round(min(current_nw/fire_target*100, 100), 1),
-            "years_left": years, "monthly_save": monthly_save}
+        nw = current_nw; years = 0
+        while nw < fire_target and years < 100:
+            nw = nw * 1.05 + monthly_save * 12
+            years += 1
+        progress = round(min(current_nw/fire_target*100, 100), 1)
+        return {"target":fire_target, "current":current_nw, "progress":progress, "years_left":years, "monthly_save":monthly_save}
+    except Exception:
+        return {"target":0, "current":0, "progress":0, "years_left":-1, "monthly_save":0}
 
 
 def calc_safe_withdrawal(params):
-    """은퇴 후 월 안전 인출 가능액 역산 (자산 고갈 방지)."""
-    retire = params["retire_age"]
-    life = params["life_expectancy"]
-    infl = params["inflation_rate"] / 100
+    try:
+        retire = _safe_int(params.get("retire_age", 60))
+        life = _safe_int(params.get("life_expectancy", 85))
+        years_in_retirement = life - retire
+        if years_in_retirement <= 0:
+            return {"retire_nw":0, "safe_monthly":0, "years":0, "pension_monthly":0}
 
-    # 은퇴 시점 자산 추정
-    df = run_simulation(params)
-    retire_row = df[df["age"] == retire]
-    if retire_row.empty:
-        return None
+        df = run_simulation(params)
+        retire_row = df[df["age"] == retire]
+        if retire_row.empty:
+            return {"retire_nw":0, "safe_monthly":0, "years":years_in_retirement, "pension_monthly":0}
 
-    retire_nw = retire_row.iloc[0]["net_worth"]
-    if retire_nw <= 0:
-        return {"retire_nw": retire_nw, "safe_monthly": 0, "years": life - retire}
+        retire_nw = float(retire_row.iloc[0]["net_worth"])
+        if retire_nw <= 0:
+            return {"retire_nw":retire_nw, "safe_monthly":0, "years":years_in_retirement, "pension_monthly":0}
 
-    years_in_retirement = life - retire
-    if years_in_retirement <= 0:
-        return None
+        pension_annual = 0
+        if params.get("mode") == "detailed":
+            pen_start = _safe_int(params.get("pension_start_age", 65))
+            if pen_start <= life:
+                pension_years = life - max(retire, pen_start)
+                if pension_years > 0:
+                    pension_annual = _safe_float(params.get("pension_monthly", 0)) * 12
 
-    # 은퇴 후 수입 (연금)
-    pension_annual = 0
-    if params["mode"] == "detailed":
-        pen_start = params.get("pension_start_age", 65)
-        if pen_start <= life:
-            pension_years = life - max(retire, pen_start)
-            if pension_years > 0:
-                pension_annual = params.get("pension_monthly", 0) * 12
+        total_available = retire_nw
+        for y in range(years_in_retirement):
+            total_available *= 1.03
+            total_available += pension_annual
 
-    # 4% 룰 기반 + 연금 고려
-    avg_return = 0.03  # 은퇴 후 보수적 수익률
-    # 연금수령 연수 비율
-    total_available = retire_nw
-    for y in range(years_in_retirement):
-        total_available *= (1 + avg_return)
-        total_available += pension_annual
-
-    safe_annual = total_available / years_in_retirement * 0.85  # 안전 마진
-    safe_monthly = max(0, safe_annual / 12)
-
-    return {
-        "retire_nw": retire_nw,
-        "safe_monthly": round(safe_monthly),
-        "years": years_in_retirement,
-        "pension_monthly": params.get("pension_monthly", 0) if params["mode"] == "detailed" else 0,
-    }
+        safe_monthly = max(0, total_available / years_in_retirement * 0.85 / 12)
+        pm = _safe_float(params.get("pension_monthly", 0)) if params.get("mode") == "detailed" else 0
+        return {"retire_nw":retire_nw, "safe_monthly":round(safe_monthly), "years":years_in_retirement, "pension_monthly":pm}
+    except Exception:
+        return {"retire_nw":0, "safe_monthly":0, "years":0, "pension_monthly":0}
