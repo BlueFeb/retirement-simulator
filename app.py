@@ -20,8 +20,8 @@ from theme import get_css, get_header_color, get_diff_colors
 DEFAULTS = dict(
     age=35, retire=60, life=85, infl=2.5,
     ts=10000, mi=400, me=250,
-    da=3000, dr=DEP_RATE, sa=4000, sr=7.0,
-    rea=30000, rr=3.0, oa=0,
+    da=3000, dr=2.83, sa=4000, sr=10.0,       # 예금 2.83%, 주식 S&P500 장기평균 10%
+    rea=30000, rr=2.5, oa=0,                    # 부동산 한국 장기평균 2.5%
     sal=400, si=0, pen=80, ps=65,
     fc=120, vc=80, svr=30.0, nl=1,
     la0=5000, lr0=LOAN_RATE, ly0=20,
@@ -40,28 +40,28 @@ def init_defaults():
 PRESETS = {
     "30대 독신": dict(
         age=30, retire=60, life=85, infl=2.5,
-        da=1500, dr=DEP_RATE, sa=2000, sr=7.0,
-        rea=0, rr=3.0, oa=0,
+        da=1500, dr=2.83, sa=2000, sr=10.0,
+        rea=0, rr=2.5, oa=0,
         sal=300, si=0, pen=50, ps=65,
         fc=60, vc=60, svr=40.0, nl=0),
     "40대 외벌이": dict(
         age=42, retire=60, life=85, infl=2.5,
-        da=5000, dr=DEP_RATE, sa=5000, sr=6.0,
+        da=5000, dr=2.83, sa=5000, sr=10.0,
         rea=40000, rr=2.5, oa=1000,
         sal=450, si=0, pen=90, ps=65,
         fc=150, vc=100, svr=20.0, nl=1,
         la0=25000, lr0=LOAN_RATE, ly0=22),
     "40대 맞벌이": dict(
         age=42, retire=58, life=85, infl=2.5,
-        da=8000, dr=DEP_RATE, sa=12000, sr=7.0,
-        rea=60000, rr=3.0, oa=2000,
+        da=8000, dr=2.83, sa=12000, sr=10.0,
+        rea=60000, rr=2.5, oa=2000,
         sal=700, si=50, pen=120, ps=65,
         fc=200, vc=150, svr=25.0, nl=1,
         la0=35000, lr0=LOAN_RATE, ly0=25),
     "50대 노후준비": dict(
         age=52, retire=60, life=88, infl=2.5,
-        da=15000, dr=DEP_RATE, sa=20000, sr=5.0,
-        rea=70000, rr=2.0, oa=5000,
+        da=15000, dr=2.83, sa=20000, sr=10.0,
+        rea=70000, rr=2.5, oa=5000,
         sal=500, si=0, pen=130, ps=65,
         fc=150, vc=100, svr=30.0, nl=1,
         la0=8000, lr0=3.5, ly0=8),
@@ -176,7 +176,7 @@ def main():
     else:
         st.subheader("🏦 보유 자산")
         st.markdown("**예금·적금**")
-        deposit_amount = amt("예금 (만원)", "da", 500, f"평균 금리 {DEP_RATE}%")
+        deposit_amount = amt("예금 (만원)", "da", 500, "한국 예금 평균 2.83%")
         deposit_rate = st.number_input("예금 수익률 (%)", min_value=0.0, max_value=20.0, step=0.1, key="dr")
         st.markdown("**주식·펀드·ETF**")
         stock_amount = amt("주식 (만원)", "sa", 500)
