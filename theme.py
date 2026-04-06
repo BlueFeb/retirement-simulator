@@ -1,41 +1,46 @@
 """
-테마 (주간/야간 모드) CSS
+테마 — 주간/야간 CSS
+핵심: Pretendard를 span, div에 적용하면 Streamlit 아이콘이 깨짐.
+     텍스트 입력/출력 요소에만 적용하고, 나머지는 Streamlit 기본 폰트를 유지.
 """
 
 COMMON_CSS = """
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-/* 아이콘 폰트를 덮어쓰지 않도록 body/input/button 등에만 적용 */
-body, p, h1, h2, h3, h4, h5, h6, span, div, li, td, th, label,
-input, textarea, select, button, a {
+
+/*
+ * ⚠️ span, div 에는 절대 font-family를 적용하지 않음!
+ * Streamlit expander 화살표, metric delta, number input +-
+ * 등이 모두 span/div 안의 특수 문자/SVG로 렌더링됨.
+ * 여기에 Pretendard를 강제하면 아이콘이 깨져서 □ 또는 글자로 보임.
+ */
+body, p, h1, h2, h3, h4, h5, h6,
+li, td, th, label,
+input, textarea, select,
+.stMarkdown, .stCaption p,
+[data-testid="stMetricValue"],
+[data-testid="stMetricLabel"],
+.stRadio label span {
     font-family: 'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif !important;
 }
-/* Streamlit 아이콘/화살표 폰트 보호 */
-[data-testid="stExpanderToggleIcon"],
-.st-emotion-cache-1gulkj5,
-svg, i, [class*="icon"], [class*="arrow"], [class*="Icon"],
-[data-baseweb] svg {
-    font-family: inherit !important;
-}
-.stApp > div > div > div > div { max-width: 720px; margin: 0 auto; }
+
+.stApp > header { visibility: hidden; }
 [data-testid="stSidebar"] { display: none; }
 
 div[data-testid="stMetricValue"] { font-size: 22px !important; }
-input[type="number"], .stSelectbox > div > div {
+input[type="number"], .stSelectbox [data-baseweb="select"] {
     min-height: 44px !important; font-size: 16px !important;
 }
 .stButton > button { min-height: 52px !important; font-size: 16px !important; border-radius: 12px !important; }
 .stButton > button[kind="primary"] { font-weight: 700 !important; font-size: 17px !important; }
 .stDownloadButton > button { min-height: 48px !important; font-size: 15px !important; border-radius: 12px !important; }
-.stRadio label { padding: 10px 16px !important; min-height: 44px !important; }
 button[data-testid="stNumberInput-StepUp"],
 button[data-testid="stNumberInput-StepDown"] { min-width: 36px !important; min-height: 36px !important; }
 .js-plotly-plot .plotly .modebar { display: none !important; }
-.streamlit-expanderHeader { min-height: 48px !important; font-size: 15px !important; }
 
 @media (max-width: 600px) {
     div[data-testid="column"] { width: 100% !important; flex: 100% !important; min-width: 100% !important; }
     h1 { font-size: 22px !important; }
-    h2, .stSubheader { font-size: 17px !important; }
+    h2 { font-size: 17px !important; }
     div[data-testid="stMetricValue"] { font-size: 20px !important; }
     .block-container { padding: 1rem 0.8rem !important; }
 }
@@ -69,6 +74,5 @@ def get_header_color(dark_mode):
     return "#6366f1" if dark_mode else "#4f46e5"
 
 def get_diff_colors(dark_mode):
-    if dark_mode:
-        return "#34d399", "#f87171"
+    if dark_mode: return "#34d399", "#f87171"
     return "#059669", "#dc2626"
