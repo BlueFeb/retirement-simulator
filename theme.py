@@ -4,7 +4,18 @@
 
 COMMON_CSS = """
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-* { font-family: 'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif !important; }
+/* 아이콘 폰트를 덮어쓰지 않도록 body/input/button 등에만 적용 */
+body, p, h1, h2, h3, h4, h5, h6, span, div, li, td, th, label,
+input, textarea, select, button, a {
+    font-family: 'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif !important;
+}
+/* Streamlit 아이콘/화살표 폰트 보호 */
+[data-testid="stExpanderToggleIcon"],
+.st-emotion-cache-1gulkj5,
+svg, i, [class*="icon"], [class*="arrow"], [class*="Icon"],
+[data-baseweb] svg {
+    font-family: inherit !important;
+}
 .stApp > div > div > div > div { max-width: 720px; margin: 0 auto; }
 [data-testid="stSidebar"] { display: none; }
 
