@@ -252,8 +252,10 @@ def main():
 
         d2,_,_ = get_key_metrics(s2,life_exp); d3,_,_ = get_key_metrics(s3,life_exp)
         sc = []
-        sc.append(f"저축 강화: {'고갈 없음 ✅' if not d2 else f'{d2[\"year\"]}년 ({d2[\"age\"]}세)'}")
-        sc.append(f"은퇴 연장: {'고갈 없음 ✅' if not d3 else f'{d3[\"year\"]}년 ({d3[\"age\"]}세)'}")
+        d2_txt = "고갈 없음 ✅" if not d2 else f"{d2['year']}년 ({d2['age']}세)"
+        d3_txt = "고갈 없음 ✅" if not d3 else f"{d3['year']}년 ({d3['age']}세)"
+        sc.append(f"저축 강화: {d2_txt}")
+        sc.append(f"은퇴 연장: {d3_txt}")
         st.info(" | ".join(sc))
 
         st.subheader("📉 민감도 분석")
