@@ -1,18 +1,16 @@
 """
 테마 — 주간/야간 CSS
-핵심: Pretendard를 span, div에 적용하면 Streamlit 아이콘이 깨짐.
-     텍스트 입력/출력 요소에만 적용하고, 나머지는 Streamlit 기본 폰트를 유지.
+
+전략:
+- config.toml에서 base="light" 설정 → 주간모드는 Streamlit 네이티브 라이트 테마 사용
+- 주간모드 CSS는 최소한의 보조만 (폰트, 터치 영역, 카드 스타일)
+- 야간모드 CSS만 배경/텍스트 색상을 전면 override
 """
 
+# 공통 (폰트, 모바일 최적화 — 색상 관련 없음)
 COMMON_CSS = """
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
-/*
- * ⚠️ span, div 에는 절대 font-family를 적용하지 않음!
- * Streamlit expander 화살표, metric delta, number input +-
- * 등이 모두 span/div 안의 특수 문자/SVG로 렌더링됨.
- * 여기에 Pretendard를 강제하면 아이콘이 깨져서 □ 또는 글자로 보임.
- */
 body, p, h1, h2, h3, h4, h5, h6,
 li, td, th, label,
 input, textarea, select,
@@ -46,75 +44,78 @@ button[data-testid="stNumberInput-StepDown"] { min-width: 36px !important; min-h
 }
 h1 { text-align: center; }
 .subtitle { text-align: center; font-size: 14px; margin-bottom: 20px; }
-.section-divider { border: none; border-top: 1px solid; margin: 20px 0; }
+.section-divider { border: none; border-top: 1px solid rgba(0,0,0,0.08); margin: 20px 0; }
 """
 
+# 주간 모드 — Streamlit 네이티브 라이트 테마 그대로 사용, 카드만 보조
 LIGHT_CSS = COMMON_CSS + """
 div[data-testid="stMetric"] {
-    background: rgba(79,70,229,0.06); border: 1px solid rgba(79,70,229,0.15);
+    background: rgba(79,70,229,0.06);
+    border: 1px solid rgba(79,70,229,0.15);
     border-radius: 14px; padding: 14px 16px;
 }
-.subtitle { color: #64748b !important; }
-.section-divider { border-color: rgba(0,0,0,0.08); }
-
-/* 라이트 모드: 배경 흰색 + 모든 텍스트 어둡게 강제 */
-.stApp, [data-testid="stAppViewContainer"], section[data-testid="stMain"],
-[data-testid="stMainBlockContainer"] {
-    background-color: #ffffff !important;
-    color: #1e293b !important;
-}
-[data-testid="stHeader"] { background-color: #ffffff !important; }
-
-/* 모든 텍스트 요소에 어두운 색 강제 */
-p, h1, h2, h3, h4, h5, h6, label, li, td, th,
-[data-testid="stMetricValue"], [data-testid="stMetricLabel"],
-[data-testid="stMetricDelta"], [data-testid="stMarkdownContainer"],
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stText"], [data-testid="stCaptionContainer"],
-.stRadio label, .stSelectbox label, .stNumberInput label,
-[data-baseweb="select"] *, [data-baseweb="input"] *,
-.stExpander summary, .stExpander [data-testid="stExpanderDetails"],
-[data-testid="stInfo"] p, [data-testid="stAlert"] p {
-    color: #1e293b !important;
-}
-.stCaption p, [data-testid="stCaptionContainer"] p { color: #64748b !important; }
-
-/* 입력 필드 텍스트/배경 */
-input, textarea, select, [data-baseweb="input"] input,
-[data-baseweb="select"] [data-baseweb="tag"] {
-    color: #1e293b !important;
-    background-color: #ffffff !important;
-}
-
-/* 버튼 텍스트 */
-.stButton > button:not([kind="primary"]) { color: #1e293b !important; }
-.stDownloadButton > button { color: #1e293b !important; }
-
-/* expander 배경 */
-[data-testid="stExpander"] { background-color: #f8fafc !important; border-radius: 12px; }
-
-/* 테이블 */
-[data-testid="stDataFrame"] { color: #1e293b !important; }
+.subtitle { color: #64748b; }
 """
 
+# 야간 모드 — 모든 색상 전면 override (와일드카드 사용)
 DARK_CSS = COMMON_CSS + """
-div[data-testid="stMetric"] {
-    background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2);
+/* 전체 배경 */
+.stApp, .stApp > *, [data-testid="stAppViewContainer"],
+section[data-testid="stMain"], [data-testid="stMainBlockContainer"],
+[data-testid="stVerticalBlock"], [data-testid="stHeader"],
+[data-testid="stBottom"] { background-color: #0c0f14 !important; }
+
+/* 전체 텍스트 — 와일드카드로 확실히 */
+.stApp p, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
+.stApp label, .stApp li, .stApp td, .stApp th,
+.stApp [data-testid="stMarkdownContainer"] *,
+.stApp [data-testid="stMetricValue"], .stApp [data-testid="stMetricLabel"],
+.stApp [data-testid="stMetricDelta"] *,
+.stApp [data-testid="stText"],
+.stApp .stRadio label *, .stApp .stSelectbox label,
+.stApp .stNumberInput label,
+.stApp [data-testid="stExpanderDetails"] *,
+.stApp summary *, .stApp [data-testid="stInfo"] *,
+.stApp [data-testid="stAlert"] * {
+    color: #e4e4e7 !important;
+}
+.stApp .stCaption p, .stApp [data-testid="stCaptionContainer"] * {
+    color: #71717a !important;
+}
+
+/* 입력 필드 */
+.stApp input, .stApp textarea, .stApp select,
+.stApp [data-baseweb="input"] *, .stApp [data-baseweb="select"] * {
+    color: #e4e4e7 !important;
+    background-color: #1a1f2e !important;
+}
+.stApp [data-baseweb="popover"] * { background-color: #1a1f2e !important; color: #e4e4e7 !important; }
+
+/* 버튼 */
+.stApp .stButton > button:not([kind="primary"]) { color: #e4e4e7 !important; background-color: #1a1f2e !important; }
+.stApp .stDownloadButton > button { color: #e4e4e7 !important; background-color: #1a1f2e !important; }
+
+/* 카드/metric */
+.stApp div[data-testid="stMetric"] {
+    background: rgba(99,102,241,0.08) !important;
+    border: 1px solid rgba(99,102,241,0.2) !important;
     border-radius: 14px; padding: 14px 16px;
 }
-.subtitle { color: #71717a; }
-.section-divider { border-color: rgba(255,255,255,0.06); }
 
-/* 다크 모드 배경/텍스트 강제 */
-.stApp, [data-testid="stAppViewContainer"], section[data-testid="stMain"] {
-    background-color: #0c0f14 !important;
-    color: #e4e4e7 !important;
-}
-[data-testid="stHeader"] { background-color: #0c0f14 !important; }
-p, h1, h2, h3, h4, h5, h6, label, li, td, th {
-    color: #e4e4e7 !important;
-}
-.stCaption p { color: #71717a !important; }
+/* expander */
+.stApp [data-testid="stExpander"] { background-color: #12161e !important; border-color: rgba(255,255,255,0.06) !important; }
+
+/* radio/selectbox 옵션 */
+.stApp [role="radiogroup"] label { color: #e4e4e7 !important; }
+.stApp [data-baseweb="radio"] * { color: #e4e4e7 !important; }
+
+/* 구분선 */
+.stApp .section-divider { border-color: rgba(255,255,255,0.06) !important; }
+.stApp .subtitle { color: #71717a !important; }
+
+/* 테이블 */
+.stApp [data-testid="stDataFrame"] * { color: #e4e4e7 !important; }
+.stApp [data-testid="stTable"] * { color: #e4e4e7 !important; }
 """
 
 def get_css(dark_mode):
