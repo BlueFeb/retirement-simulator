@@ -54,15 +54,47 @@ div[data-testid="stMetric"] {
     background: rgba(79,70,229,0.06); border: 1px solid rgba(79,70,229,0.15);
     border-radius: 14px; padding: 14px 16px;
 }
-.subtitle { color: #64748b; }
+.subtitle { color: #64748b !important; }
 .section-divider { border-color: rgba(0,0,0,0.08); }
 
-/* 라이트 모드 배경/텍스트 강제 */
-.stApp, [data-testid="stAppViewContainer"], section[data-testid="stMain"] {
+/* 라이트 모드: 배경 흰색 + 모든 텍스트 어둡게 강제 */
+.stApp, [data-testid="stAppViewContainer"], section[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
     background-color: #ffffff !important;
     color: #1e293b !important;
 }
 [data-testid="stHeader"] { background-color: #ffffff !important; }
+
+/* 모든 텍스트 요소에 어두운 색 강제 */
+p, h1, h2, h3, h4, h5, h6, label, li, td, th,
+[data-testid="stMetricValue"], [data-testid="stMetricLabel"],
+[data-testid="stMetricDelta"], [data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stText"], [data-testid="stCaptionContainer"],
+.stRadio label, .stSelectbox label, .stNumberInput label,
+[data-baseweb="select"] *, [data-baseweb="input"] *,
+.stExpander summary, .stExpander [data-testid="stExpanderDetails"],
+[data-testid="stInfo"] p, [data-testid="stAlert"] p {
+    color: #1e293b !important;
+}
+.stCaption p, [data-testid="stCaptionContainer"] p { color: #64748b !important; }
+
+/* 입력 필드 텍스트/배경 */
+input, textarea, select, [data-baseweb="input"] input,
+[data-baseweb="select"] [data-baseweb="tag"] {
+    color: #1e293b !important;
+    background-color: #ffffff !important;
+}
+
+/* 버튼 텍스트 */
+.stButton > button:not([kind="primary"]) { color: #1e293b !important; }
+.stDownloadButton > button { color: #1e293b !important; }
+
+/* expander 배경 */
+[data-testid="stExpander"] { background-color: #f8fafc !important; border-radius: 12px; }
+
+/* 테이블 */
+[data-testid="stDataFrame"] { color: #1e293b !important; }
 """
 
 DARK_CSS = COMMON_CSS + """
