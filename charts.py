@@ -32,8 +32,8 @@ def _get_colors(dark_mode):
     }
 
 
-def chart_main(df, retire_age, dep_info, dark_mode=False):
-    """메인 순자산 추이 차트."""
+def chart_main(df, retire_age, dep_info, dark_mode=False, return_variants=None):
+    """메인 순자산 추이 차트. return_variants: list of (df, label) for return rate lines."""
     c = _get_colors(dark_mode)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -41,9 +41,19 @@ def chart_main(df, retire_age, dep_info, dark_mode=False):
         line=dict(color=c["yellow"], width=2, dash="dot"),
         fill="tozeroy", fillcolor=c["yellow_fill"]))
     fig.add_trace(go.Scatter(
-        x=df["age"], y=df["net_worth"], mode="lines", name="내 순자산",
+        x=df["age"], y=df["net_worth"], mode="lines", name="내 순자산 (현재)",
         line=dict(color=c["indigo"], width=3),
         fill="tozeroy", fillcolor=c["indigo_fill"]))
+
+    if return_variants:
+        rv_colors = ["#06b6d4", "#f59e0b", "#ec4899"]  # cyan, amber, pink
+        for i, (vdf, vlabel) in enumerate(return_variants):
+            if vdf is not None:
+                fig.add_trace(go.Scatter(
+                    x=vdf["age"], y=vdf["net_worth"], mode="lines", name=vlabel,
+                    line=dict(color=rv_colors[i % len(rv_colors)], width=1.5, dash="dash"),
+                    opacity=0.75))
+
     fig.add_vline(x=retire_age, line_dash="dash", line_color=c["yellow"],
                   annotation_text="은퇴", annotation_font_color=c["yellow"])
     if dep_info:
@@ -52,8 +62,8 @@ def chart_main(df, retire_age, dep_info, dark_mode=False):
     fig.add_hline(y=0, line_color=c["grid"])
     fig.update_layout(
         template=c["template"], paper_bgcolor=c["paper"], plot_bgcolor=c["bg"],
-        height=350, margin=dict(l=5,r=5,t=30,b=40),
-        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=11)),
+        height=400, margin=dict(l=5,r=5,t=30,b=40),
+        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=10)),
         xaxis_title="나이", yaxis_title="만원", xaxis=dict(dtick=10),
         yaxis=dict(tickformat=","), hovermode="x unified", dragmode=False,
         font=dict(color=c["text"]))
@@ -121,25 +131,19 @@ def chart_cashflow(params, dark_mode=False):
     return fig
 
 
-def chart_scenarios(base, s2, s3, retire_age, dark_mode=False, extra=None):
-    """시나리오 비교 차트. extra: list of (df, label) for additional lines."""
+def chart_scenarios(base, s2, s3, retire_age, dark_mode=False):
+    """시나리오 비교 차트: 현재/저축강화/은퇴연장."""
     c = _get_colors(dark_mode)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=base["age"],y=base["net_worth"],mode="lines",name="현재 계획",line=dict(color=c["indigo"],width=3)))
     fig.add_trace(go.Scatter(x=s2["age"],y=s2["net_worth"],mode="lines",name="저축 강화",line=dict(color=c["green"],width=2,dash="dash")))
     fig.add_trace(go.Scatter(x=s3["age"],y=s3["net_worth"],mode="lines",name="은퇴 3년 연장",line=dict(color=c["yellow"],width=2,dash="dot")))
-    # 추가 시나리오 (수익률 변형 등)
-    if extra:
-        extra_colors = ["#06b6d4", "#ec4899"]  # cyan, pink
-        for i, (edf, elabel) in enumerate(extra):
-            ec = extra_colors[i % len(extra_colors)]
-            fig.add_trace(go.Scatter(x=edf["age"],y=edf["net_worth"],mode="lines",name=elabel,
-                                     line=dict(color=ec,width=1.8,dash="dashdot"),opacity=0.8))
     fig.add_hline(y=0,line_color=c["grid"])
     fig.add_vline(x=retire_age,line_dash="dash",line_color=c["gray"],annotation_text="은퇴",annotation_font_color=c["gray"])
-    fig.update_layout(template=c["template"],paper_bgcolor=c["paper"],plot_bgcolor=c["bg"],height=360,
-        margin=dict(l=5,r=5,t=30,b=40),legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=10)),
+    fig.update_layout(template=c["template"],paper_bgcolor=c["paper"],plot_bgcolor=c["bg"],height=320,
+        margin=dict(l=5,r=5,t=30,b=40),legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=11)),
         xaxis_title="나이",yaxis=dict(tickformat=","),hovermode="x unified",dragmode=False,font=dict(color=c["text"]))
+    return fig
     return fig
 
 
