@@ -13,29 +13,47 @@ from report_pdf import generate_pdf_report
 from gsheet import get_gsheet_connection, save_to_gsheet
 from theme import get_css, get_header_color, get_diff_colors
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 기본값 상수
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+D_AGE=35; D_RETIRE=60; D_LIFE=85; D_INFL=2.5
+D_TS=10000; D_MI=400; D_ME=250
+D_DA=3000; D_DR=2.83     # 예금 금리: 한국은행 2026.2 평균
+D_SA=4000; D_SR=10.0      # 주식: S&P500 장기 평균
+D_REA=30000; D_RR=2.5     # 부동산: 한국 장기 평균
+D_OA=0
+D_SAL=400; D_SI=0; D_PEN=80; D_PS=65
+D_FC=120; D_VC=80; D_SVR=30.0; D_NL=1
+D_LA=5000; D_LR=LOAN_RATE; D_LY=20
+
+
+def _v(key, default):
+    """session_state에 값이 있으면 그걸 쓰고, 없으면 default."""
+    return st.session_state.get(key, default)
+
+
+def amt(label, key, default, step=1000, help_text=None, max_val=10_000_000_000):
+    """금액 입력 + 한글 표시. value를 명시적으로 전달."""
+    val = st.number_input(label, min_value=0, max_value=max_val,
+                          value=_v(key, default), step=step, key=key, help=help_text)
+    if val and val > 0:
+        st.caption(f"💰 {amount_to_korean(val)}")
+    return val
+
+def amt_s(label, key, default, step=10, help_text=None):
+    return amt(label, key, default, step, help_text, 1_000_000)
+
+
+def encode_params(params):
+    try:
+        j = json.dumps({k:v for k,v in params.items() if v is not None}, ensure_ascii=False, separators=(',',':'))
+        return base64.urlsafe_b64encode(j.encode()).decode()
+    except Exception:
+        return ""
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 기본값 — session_state 키와 1:1 매핑
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DEFAULTS = dict(
-    age=35, retire=60, life=85, infl=2.5,
-    ts=10000, mi=400, me=250,
-    da=3000, dr=2.83, sa=4000, sr=10.0,       # 예금 2.83%, 주식 S&P500 장기평균 10%
-    rea=30000, rr=2.5, oa=0,                    # 부동산 한국 장기평균 2.5%
-    sal=400, si=0, pen=80, ps=65,
-    fc=120, vc=80, svr=30.0, nl=1,
-    la0=5000, lr0=LOAN_RATE, ly0=20,
-)
-
-
-def init_defaults():
-    for k, v in DEFAULTS.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 프리셋 — session_state 키와 동일한 이름 사용
+# 프리셋
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRESETS = {
     "30대 독신": dict(
@@ -69,34 +87,10 @@ PRESETS = {
 
 
 def apply_preset(preset):
-    """프리셋 → session_state. 위젯 key와 동일한 이름이므로 충돌 없음."""
     for k, v in preset.items():
         st.session_state[k] = v
-    # 결과 캐시 초기화
     for ck in ["results", "pdf_cache", "csv_cache"]:
         st.session_state.pop(ck, None)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 금액 입력 + 한글 표시
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def amt(label, key, step=1000, help_text=None, max_val=10_000_000_000):
-    """number_input wrapper — default는 session_state에서만 관리."""
-    val = st.number_input(label, min_value=0, max_value=max_val, step=step, key=key, help=help_text)
-    if val and val > 0:
-        st.caption(f"💰 {amount_to_korean(val)}")
-    return val
-
-def amt_s(label, key, step=10, help_text=None):
-    return amt(label, key, step, help_text, 1_000_000)
-
-
-def encode_params(params):
-    try:
-        j = json.dumps({k:v for k,v in params.items() if v is not None}, ensure_ascii=False, separators=(',',':'))
-        return base64.urlsafe_b64encode(j.encode()).decode()
-    except Exception:
-        return ""
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -104,7 +98,6 @@ def encode_params(params):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def main():
     st.set_page_config(page_title="자산 고갈 시뮬레이터", page_icon="📊", layout="centered")
-    init_defaults()
 
     if "dark_mode" not in st.session_state:
         st.session_state.dark_mode = False
@@ -127,14 +120,14 @@ def main():
     st.markdown("<p class='subtitle'>현재 자산과 수입·지출을 입력하면<br>"
                 "자산이 언제 고갈되는지 시뮬레이션합니다</p>", unsafe_allow_html=True)
 
-    # Sheets — 에러일 때만 표시
+    # Sheets — 에러만
     gsheet_ok = get_gsheet_connection() is not None
     if not gsheet_ok:
         err = st.session_state.get("gsheet_error", "")
         if err:
             st.caption(f"⚠️ Sheets 미연결 — {err}")
 
-    # 프리셋 (4개 → 2x2로 모바일 대응)
+    # 프리셋
     with st.expander("⚡ 빠른 시작 — 프리셋"):
         r1c1, r1c2 = st.columns(2)
         r2c1, r2c2 = st.columns(2)
@@ -144,31 +137,30 @@ def main():
                 apply_preset(preset)
                 st.rerun()
 
-    # 모드 — session_state 충돌 방지: key 없이 사용
-    mode_options = ["간단 분석", "상세 분석"]
-    mode = st.radio("분석 모드", mode_options, horizontal=True, label_visibility="collapsed")
+    mode = st.radio("분석 모드", ["간단 분석","상세 분석"], horizontal=True, label_visibility="collapsed")
     is_simple = mode == "간단 분석"
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-    # ━━ 입력 ━━
+    # ━━ 기본 정보 ━━
     st.subheader("👤 기본 정보")
-    age = st.number_input("현재 나이", min_value=15, max_value=100, key="age")
+    age = st.number_input("현재 나이", min_value=15, max_value=100, value=_v("age", D_AGE), key="age")
     gender = st.selectbox("성별", ["남성","여성"])
     gender_key = "male" if gender=="남성" else "female"
-    retire_age = st.number_input("은퇴 나이", min_value=30, max_value=100, key="retire")
-    life_exp = st.number_input("기대 수명 (한국 평균 83.7세)", min_value=60, max_value=120, key="life")
-    inflation_rate = st.number_input("연간 물가상승률 (%)", min_value=0.0, max_value=15.0, step=0.1, key="infl",
+    retire_age = st.number_input("은퇴 나이", min_value=30, max_value=100, value=_v("retire", D_RETIRE), key="retire")
+    life_exp = st.number_input("기대 수명 (한국 평균 83.7세)", min_value=60, max_value=120, value=_v("life", D_LIFE), key="life")
+    inflation_rate = st.number_input("연간 물가상승률 (%)", min_value=0.0, max_value=15.0,
+                                     value=_v("infl", D_INFL), step=0.1, key="infl",
                                      help="간단: 전체 지출 | 상세: 변동비100%+고정비50%")
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     if is_simple:
         st.subheader("💰 자산 & 수입")
-        total_savings = amt("총 모아놓은 자금 (만원)", "ts", 1000, "예금+주식+부동산 등")
-        monthly_income = amt_s("월 수입 — 세후 (만원)", "mi")
+        total_savings = amt("총 모아놓은 자금 (만원)", "ts", D_TS, 1000, "예금+주식+부동산 등")
+        monthly_income = amt_s("월 수입 — 세후 (만원)", "mi", D_MI)
         st.subheader("💸 지출")
-        monthly_expense = amt_s("월 평균 지출 (만원)", "me")
+        monthly_expense = amt_s("월 평균 지출 (만원)", "me", D_ME)
         params = dict(mode="simple", age=age, gender=gender_key, retire_age=retire_age,
                       life_expectancy=life_exp, inflation_rate=inflation_rate,
                       total_savings=total_savings, monthly_income=monthly_income,
@@ -176,43 +168,47 @@ def main():
     else:
         st.subheader("🏦 보유 자산")
         st.markdown("**예금·적금**")
-        deposit_amount = amt("예금 (만원)", "da", 500, "한국 예금 평균 2.83%")
-        deposit_rate = st.number_input("예금 수익률 (%)", min_value=0.0, max_value=20.0, step=0.1, key="dr")
+        deposit_amount = amt("예금 (만원)", "da", D_DA, 500, "한국 예금 평균 2.83%")
+        deposit_rate = st.number_input("예금 수익률 (%)", min_value=0.0, max_value=20.0,
+                                       value=_v("dr", D_DR), step=0.1, key="dr")
         st.markdown("**주식·펀드·ETF**")
-        stock_amount = amt("주식 (만원)", "sa", 500)
-        stock_return = st.number_input("기대 수익률 (%)", min_value=-20.0, max_value=30.0, step=0.5, key="sr")
+        stock_amount = amt("주식 (만원)", "sa", D_SA, 500)
+        stock_return = st.number_input("기대 수익률 (%) — S&P500 장기 평균 10%", min_value=-20.0, max_value=30.0,
+                                       value=_v("sr", D_SR), step=0.5, key="sr")
         st.markdown("**부동산**")
-        real_estate = amt("부동산 시가 (만원)", "rea", 5000)
-        re_return = st.number_input("부동산 상승률 (%)", min_value=-10.0, max_value=20.0, step=0.5, key="rr")
-        other_assets = amt("기타 자산 (만원)", "oa", 500, "보험, 금 등")
+        real_estate = amt("부동산 시가 (만원)", "rea", D_REA, 5000)
+        re_return = st.number_input("부동산 상승률 (%) — 한국 장기 평균 2.5%", min_value=-10.0, max_value=20.0,
+                                    value=_v("rr", D_RR), step=0.5, key="rr")
+        other_assets = amt("기타 자산 (만원)", "oa", D_OA, 500, "보험, 금 등")
 
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
         st.subheader("📈 수입")
-        salary = amt_s("월 급여 — 세후 (만원)", "sal")
-        side_income = amt_s("부수입 (만원/월)", "si")
-        pension = amt_s("국민연금 예상 (만원/월)", "pen", 5)
-        pension_start = st.number_input("연금 시작 나이", min_value=55, max_value=80, key="ps")
+        salary = amt_s("월 급여 — 세후 (만원)", "sal", D_SAL)
+        side_income = amt_s("부수입 (만원/월)", "si", D_SI)
+        pension = amt_s("국민연금 예상 (만원/월)", "pen", D_PEN, 5)
+        pension_start = st.number_input("연금 시작 나이", min_value=55, max_value=80,
+                                        value=_v("ps", D_PS), key="ps")
 
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
         st.subheader("💸 지출")
         st.info(f"📌 물가상승률 {inflation_rate}%: 변동비 100% · 고정비 50%")
-        fixed_cost = amt_s("월 고정비 (만원) — 주거·보험·교육", "fc")
-        variable_cost = amt_s("월 변동비 (만원) — 식비·교통·여가", "vc")
-        savings_rate = st.number_input("저축률 (%)", min_value=0.0, max_value=100.0, step=5.0, key="svr")
+        fixed_cost = amt_s("월 고정비 (만원) — 주거·보험·교육", "fc", D_FC)
+        variable_cost = amt_s("월 변동비 (만원) — 식비·교통·여가", "vc", D_VC)
+        savings_rate = st.number_input("저축률 (%)", min_value=0.0, max_value=100.0,
+                                       value=_v("svr", D_SVR), step=5.0, key="svr")
 
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
         st.subheader("🏠 대출")
-        num_loans = st.number_input("대출 건수", min_value=0, max_value=5, key="nl")
+        num_loans = st.number_input("대출 건수", min_value=0, max_value=5,
+                                     value=_v("nl", D_NL), key="nl")
         loans = []
         for i in range(int(num_loans)):
-            # 새 대출 슬롯의 기본값 보장
-            if f"la{i}" not in st.session_state: st.session_state[f"la{i}"] = 5000
-            if f"lr{i}" not in st.session_state: st.session_state[f"lr{i}"] = LOAN_RATE
-            if f"ly{i}" not in st.session_state: st.session_state[f"ly{i}"] = 20
             with st.expander(f"대출 {i+1}", expanded=(i==0)):
-                la = amt(f"잔액 (만원)", f"la{i}", 1000)
-                lr = st.number_input(f"이자율 (%)", min_value=0.0, max_value=20.0, step=0.1, key=f"lr{i}")
-                ly = st.number_input(f"남은 기간 (년)", min_value=1, max_value=40, key=f"ly{i}")
+                la = amt(f"잔액 (만원)", f"la{i}", D_LA, 1000)
+                lr = st.number_input(f"이자율 (%)", min_value=0.0, max_value=20.0,
+                                     value=_v(f"lr{i}", D_LR), step=0.1, key=f"lr{i}")
+                ly = st.number_input(f"남은 기간 (년)", min_value=1, max_value=40,
+                                     value=_v(f"ly{i}", D_LY), key=f"ly{i}")
                 loans.append({"amount":la, "rate":lr, "years":ly})
 
         params = dict(mode="detailed", age=age, gender=gender_key, retire_age=retire_age,
@@ -253,14 +249,13 @@ def main():
         st.session_state.pop("pdf_cache", None)
         st.session_state.pop("csv_cache", None)
 
-        # Sheets — 에러만 표시
         try:
             saved, msg = save_to_gsheet(params,
                 {"depletion":dep_info,"peak":peak_info,"current":current_info,"fire":fire,"safe_withdrawal":safe})
             if not saved:
                 st.warning(f"⚠️ Sheets: {msg}")
         except Exception:
-            pass  # Sheets 에러로 앱이 죽지 않도록
+            pass
 
     # ━━ 결과 표시 ━━
     if "results" not in st.session_state:
@@ -274,7 +269,6 @@ def main():
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-    # 요약
     st.subheader("📋 분석 결과")
     m1, m2 = st.columns(2)
     if dep_info:
@@ -284,7 +278,6 @@ def main():
     m2.metric("📈 최대 자산", fmt_krw(peak_info["net_worth"]),
               f"{peak_info['year']}년 ({peak_info['age']}세)")
 
-    # 동연령 비교
     diff = current_info["net_worth"] - current_info["avg_peer"]
     avg = current_info["avg_peer"]
     pct_val = round(current_info["net_worth"] / avg * 100) if avg and avg != 0 else 0
@@ -302,7 +295,6 @@ def main():
         <div style="font-size:17px;font-weight:700;color:{dc}">{sign}{fmt_krw(diff)} ({pct_val}%)</div></div>
         <div style="font-size:32px">{emoji}</div></div>""", unsafe_allow_html=True)
 
-    # FIRE + 안전인출
     f1, f2 = st.columns(2)
     with f1:
         yl = fire.get("years_left", -1)
@@ -320,7 +312,6 @@ def main():
         else:
             st.metric("💳 안전 인출", "계산 불가", "은퇴 시 자산 부족")
 
-    # 차트
     pcfg = {"displayModeBar": False, "scrollZoom": False}
 
     try:
@@ -328,12 +319,19 @@ def main():
         if fig_pie:
             st.subheader("🥧 현재 자산 구성")
             st.plotly_chart(fig_pie, use_container_width=True, config=pcfg)
-    except Exception:
-        pass
+    except Exception: pass
 
     try:
         st.subheader("📊 순자산 추이")
-        fig_main = chart_main(df, params["retire_age"], dep_info, dark)
+        # 간단 모드: 수익률별 시뮬레이션 추가
+        return_variants = None
+        if params.get("mode") == "simple":
+            return_variants = []
+            for rate in [5, 10, 15]:
+                vdf = run_simulation(params, {"avg_return": float(rate)})
+                return_variants.append((f"수익률 {rate}%", vdf))
+            st.caption("점선: 자산 수익률이 연 5% / 10% / 15%일 때")
+        fig_main = chart_main(df, params["retire_age"], dep_info, dark, return_variants)
         st.plotly_chart(fig_main, use_container_width=True, config=pcfg)
     except Exception as e:
         st.warning(f"차트 오류: {e}")
@@ -343,14 +341,12 @@ def main():
         if fig_comp:
             st.subheader("🏗️ 자산 구성 변화")
             st.plotly_chart(fig_comp, use_container_width=True, config=pcfg)
-    except Exception:
-        pass
+    except Exception: pass
 
     try:
         st.subheader("💰 월 수입 vs 지출")
         st.plotly_chart(chart_cashflow(params, dark), use_container_width=True, config=pcfg)
-    except Exception:
-        pass
+    except Exception: pass
 
     try:
         st.subheader("🔀 시나리오 비교")
@@ -362,17 +358,14 @@ def main():
         d2_txt = "고갈 없음 ✅" if not d2_m else f"{d2_m['year']}년 ({d2_m['age']}세)"
         d3_txt = "고갈 없음 ✅" if not d3_m else f"{d3_m['year']}년 ({d3_m['age']}세)"
         st.info(f"저축 강화: {d2_txt} | 은퇴 연장: {d3_txt}")
-    except Exception:
-        pass
+    except Exception: pass
 
     try:
         st.subheader("📉 민감도 분석")
         st.plotly_chart(chart_sensitivity(opt, base_sens, pess, dark),
                         use_container_width=True, config=pcfg)
-    except Exception:
-        pass
+    except Exception: pass
 
-    # 물가 영향
     try:
         if params.get("inflation_rate", 0) > 0:
             with st.expander("📈 물가상승률 영향 상세"):
@@ -397,10 +390,8 @@ def main():
                         f"| 변동비 | {nv:,.0f}만 | {rv:,.0f}만 | {ev:,.0f}만 |\n"
                         f"| 고정비 | {nf:,.0f}만 | {rf:,.0f}만 | {ef:,.0f}만 |\n"
                         f"| **합계** | **{nv+nf:,.0f}만** | **{rv+rf:,.0f}만** | **{ev+ef:,.0f}만** |")
-    except Exception:
-        pass
+    except Exception: pass
 
-    # 주요 시점 테이블
     try:
         st.subheader("📋 주요 시점")
         m_ages = sorted(set([params["age"], params["retire_age"], 65, 70, 80, params["life_expectancy"]]))
@@ -410,13 +401,11 @@ def main():
         disp.columns = ["연도","나이","내 순자산","동연령 평균","차이"]
         st.dataframe(disp.style.format({"내 순자산":"{:,.0f}","동연령 평균":"{:,.0f}","차이":"{:+,.0f}"}),
                      use_container_width=True, hide_index=True)
-    except Exception:
-        pass
+    except Exception: pass
 
     # ━━ 다운로드 ━━
     st.subheader("📥 보고서 & 데이터")
 
-    # PDF 캐싱
     if "pdf_cache" not in st.session_state:
         try:
             chart_imgs = generate_chart_images_for_pdf(
@@ -434,7 +423,6 @@ def main():
             f"자산시뮬레이션_{datetime.now().strftime('%Y%m%d')}.pdf",
             "application/pdf", use_container_width=True)
 
-    # CSV 캐싱
     if "csv_cache" not in st.session_state:
         st.session_state["csv_cache"] = df.to_csv(index=False).encode("utf-8-sig")
 
@@ -443,7 +431,6 @@ def main():
         f"자산시뮬레이션_{datetime.now().strftime('%Y%m%d')}.csv",
         "text/csv", use_container_width=True)
 
-    # 공유
     st.subheader("🔗 공유")
     st.code(f"?d={encode_params(params)}", language=None)
     st.caption("위 파라미터를 앱 URL 뒤에 붙이면 동일 설정으로 공유 가능")
