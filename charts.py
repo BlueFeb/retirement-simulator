@@ -32,8 +32,8 @@ def _get_colors(dark_mode):
     }
 
 
-def chart_main(df, retire_age, dep_info, dark_mode=False, return_variants=None):
-    """메인 순자산 추이 차트. return_variants: list of (label, df) for simple mode return rate comparison."""
+def chart_main(df, retire_age, dep_info, dark_mode=False):
+    """메인 순자산 추이 차트."""
     c = _get_colors(dark_mode)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -41,20 +41,9 @@ def chart_main(df, retire_age, dep_info, dark_mode=False, return_variants=None):
         line=dict(color=c["yellow"], width=2, dash="dot"),
         fill="tozeroy", fillcolor=c["yellow_fill"]))
     fig.add_trace(go.Scatter(
-        x=df["age"], y=df["net_worth"], mode="lines", name="내 순자산 (현재)",
+        x=df["age"], y=df["net_worth"], mode="lines", name="내 순자산",
         line=dict(color=c["indigo"], width=3),
         fill="tozeroy", fillcolor=c["indigo_fill"]))
-
-    # 수익률별 변형 라인 (간단 모드)
-    if return_variants:
-        variant_colors = ["#06b6d4", "#f59e0b", "#ec4899"]  # cyan, amber, pink
-        for i, (label, vdf) in enumerate(return_variants):
-            color = variant_colors[i % len(variant_colors)]
-            fig.add_trace(go.Scatter(
-                x=vdf["age"], y=vdf["net_worth"], mode="lines", name=label,
-                line=dict(color=color, width=1.5, dash="dash"),
-                opacity=0.7))
-
     fig.add_vline(x=retire_age, line_dash="dash", line_color=c["yellow"],
                   annotation_text="은퇴", annotation_font_color=c["yellow"])
     if dep_info:
@@ -63,8 +52,8 @@ def chart_main(df, retire_age, dep_info, dark_mode=False, return_variants=None):
     fig.add_hline(y=0, line_color=c["grid"])
     fig.update_layout(
         template=c["template"], paper_bgcolor=c["paper"], plot_bgcolor=c["bg"],
-        height=400, margin=dict(l=5,r=5,t=30,b=40),
-        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=10)),
+        height=350, margin=dict(l=5,r=5,t=30,b=40),
+        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=11)),
         xaxis_title="나이", yaxis_title="만원", xaxis=dict(dtick=10),
         yaxis=dict(tickformat=","), hovermode="x unified", dragmode=False,
         font=dict(color=c["text"]))
@@ -132,16 +121,24 @@ def chart_cashflow(params, dark_mode=False):
     return fig
 
 
-def chart_scenarios(base, s2, s3, retire_age, dark_mode=False):
+def chart_scenarios(base, s2, s3, retire_age, dark_mode=False, extra=None):
+    """시나리오 비교 차트. extra: list of (df, label) for additional lines."""
     c = _get_colors(dark_mode)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=base["age"],y=base["net_worth"],mode="lines",name="현재 계획",line=dict(color=c["indigo"],width=3)))
     fig.add_trace(go.Scatter(x=s2["age"],y=s2["net_worth"],mode="lines",name="저축 강화",line=dict(color=c["green"],width=2,dash="dash")))
     fig.add_trace(go.Scatter(x=s3["age"],y=s3["net_worth"],mode="lines",name="은퇴 3년 연장",line=dict(color=c["yellow"],width=2,dash="dot")))
+    # 추가 시나리오 (수익률 변형 등)
+    if extra:
+        extra_colors = ["#06b6d4", "#ec4899"]  # cyan, pink
+        for i, (edf, elabel) in enumerate(extra):
+            ec = extra_colors[i % len(extra_colors)]
+            fig.add_trace(go.Scatter(x=edf["age"],y=edf["net_worth"],mode="lines",name=elabel,
+                                     line=dict(color=ec,width=1.8,dash="dashdot"),opacity=0.8))
     fig.add_hline(y=0,line_color=c["grid"])
     fig.add_vline(x=retire_age,line_dash="dash",line_color=c["gray"],annotation_text="은퇴",annotation_font_color=c["gray"])
-    fig.update_layout(template=c["template"],paper_bgcolor=c["paper"],plot_bgcolor=c["bg"],height=320,
-        margin=dict(l=5,r=5,t=30,b=40),legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=11)),
+    fig.update_layout(template=c["template"],paper_bgcolor=c["paper"],plot_bgcolor=c["bg"],height=360,
+        margin=dict(l=5,r=5,t=30,b=40),legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=10)),
         xaxis_title="나이",yaxis=dict(tickformat=","),hovermode="x unified",dragmode=False,font=dict(color=c["text"]))
     return fig
 
@@ -213,19 +210,7 @@ def generate_chart_images_for_pdf(df, params, dep_info, retire_age,
     ax.fill_between(df["age"], df["avg_peer"], alpha=0.08, color="#d97706")
     ax.plot(df["age"], df["avg_peer"], "--", color="#d97706", linewidth=1.5, label="동연령 평균")
     ax.fill_between(df["age"], df["net_worth"], alpha=0.1, color="#4f46e5")
-    ax.plot(df["age"], df["net_worth"], color="#4f46e5", linewidth=2.5, label="내 순자산 (현재)")
-
-    # 간단 모드: 수익률 5%, 10%, 15% 변형
-    if params.get("mode") == "simple":
-        from engine import run_simulation as _run_sim
-        variant_colors = ["#06b6d4", "#f59e0b", "#ec4899"]
-        for rate, vc in zip([5, 10, 15], variant_colors):
-            try:
-                vdf = _run_sim(params, {"avg_return": float(rate)})
-                ax.plot(vdf["age"], vdf["net_worth"], "--", color=vc, linewidth=1.2,
-                        alpha=0.7, label=f"수익률 {rate}%")
-            except Exception:
-                pass
+    ax.plot(df["age"], df["net_worth"], color="#4f46e5", linewidth=2.5, label="내 순자산")
 
     ax.axvline(x=retire_age, color="#d97706", linestyle="--", alpha=0.5)
     ax.text(retire_age+0.5, ax.get_ylim()[1]*0.9, "은퇴", fontsize=9, color="#d97706")
