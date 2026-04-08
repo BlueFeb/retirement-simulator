@@ -105,15 +105,18 @@ def run_simulation(p, override=None):
         nw = _safe_float(params.get("total_savings", 0))
         m_inc = _safe_float(params.get("monthly_income", 0))
         m_exp = _safe_float(params.get("monthly_expense", 0))
-        avg_ret = _safe_float(params.get("avg_return", 4.0)) / 100
+        ann_ret = _safe_float(params.get("avg_return", DEP_RATE)) / 100
+        monthly_ret = (1 + ann_ret) ** (1/12) - 1  # 연 수익률 → 월 복리 수익률
 
         for y in range(c_age, life+1):
             el = y - c_age
             rows.append({"age":y, "year":2026+el,
                          "net_worth":round(nw), "avg_peer":interp_nw(y, gender)})
-            ann_inc = m_inc*12 if y < retire else 0
-            ann_exp = m_exp*12*((1+infl)**el)
-            nw = nw + ann_inc - ann_exp + nw*avg_ret
+            # 12개월 각각 월초 순자산 기준으로 수익 + 수입 - 지출 계산
+            m_exp_now = m_exp * ((1 + infl) ** el)  # 물가 반영된 이번 해 월 지출
+            m_inc_now = m_inc if y < retire else 0
+            for _ in range(12):
+                nw = nw * (1 + monthly_ret) + m_inc_now - m_exp_now
     else:
         dep = _safe_float(params.get("deposit_amount", 0))
         stk = _safe_float(params.get("stock_amount", 0))
@@ -122,6 +125,11 @@ def run_simulation(p, override=None):
         dR = _safe_float(params.get("deposit_rate", 2.83)) / 100
         sR = _safe_float(params.get("stock_return", 10)) / 100
         rR = _safe_float(params.get("real_estate_return", 2.5)) / 100
+
+        # avg_return 오버라이드: 수익률 시나리오에서 모든 자산에 통합 수익률 적용
+        if "avg_return" in params:
+            unified = _safe_float(params["avg_return"]) / 100
+            dR = unified; sR = unified; rR = unified
         mSal = _safe_float(params.get("salary", 0))
         mSide = _safe_float(params.get("side_income", 0))
         mPen = _safe_float(params.get("pension_monthly", 0))
