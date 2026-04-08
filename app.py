@@ -6,7 +6,7 @@ from datetime import datetime
 from engine import (run_simulation, get_key_metrics, run_scenarios,
                     run_sensitivity, calc_fire_index, calc_safe_withdrawal,
                     fmt_krw, amount_to_korean, DEP_RATE, LOAN_RATE)
-from charts import (chart_main, chart_composition, chart_pie, chart_cashflow,
+from charts import (chart_composition, chart_pie, chart_cashflow,
                      chart_scenarios, chart_sensitivity,
                      generate_chart_images_for_pdf)
 from report_pdf import generate_pdf_report
@@ -328,7 +328,11 @@ def main():
 
     try:
         st.subheader("📊 순자산 추이")
-        fig_main = chart_main(df, params["retire_age"], dep_info, dark)
+        rv = None
+        if params.get("mode") == "simple" and ret5 is not None:
+            st.caption("점선: 자산 수익률이 연 5% / 10% / 15%일 때")
+            rv = [(ret5, "수익률 5%"), (ret10, "수익률 10%"), (ret15, "수익률 15%")]
+        fig_main = chart_main(df, params["retire_age"], dep_info, dark, return_variants=rv)
         st.plotly_chart(fig_main, use_container_width=True, config=pcfg)
     except Exception as e:
         st.warning(f"차트 오류: {e}")
@@ -347,29 +351,14 @@ def main():
 
     try:
         st.subheader("🔀 시나리오 비교")
-        if params.get("mode") == "simple" and ret5 is not None and ret10 is not None:
-            st.caption("① 현재 계획 · ② 저축 강화 · ③ 은퇴 3년 연장 · ④ 수익률 5% · ⑤ 수익률 10%")
-            st.plotly_chart(chart_scenarios(base, s2, s3, params["retire_age"], dark,
-                                           extra=[(ret5, "수익률 5%"), (ret10, "수익률 10%")]),
-                            use_container_width=True, config=pcfg)
-        else:
-            st.caption("① 현재 계획 · ② 저축 강화 · ③ 은퇴 3년 연장")
-            st.plotly_chart(chart_scenarios(base, s2, s3, params["retire_age"], dark),
-                            use_container_width=True, config=pcfg)
-
-        # 시나리오 요약 텍스트
+        st.caption("① 현재 계획 · ② 저축 강화 · ③ 은퇴 3년 연장")
+        st.plotly_chart(chart_scenarios(base, s2, s3, params["retire_age"], dark),
+                        use_container_width=True, config=pcfg)
         d2_m, _, _ = get_key_metrics(s2, params["life_expectancy"])
         d3_m, _, _ = get_key_metrics(s3, params["life_expectancy"])
         d2_txt = "고갈 없음 ✅" if not d2_m else f"{d2_m['year']}년 ({d2_m['age']}세)"
         d3_txt = "고갈 없음 ✅" if not d3_m else f"{d3_m['year']}년 ({d3_m['age']}세)"
-        info_parts = [f"저축 강화: {d2_txt}", f"은퇴 연장: {d3_txt}"]
-        if params.get("mode") == "simple" and ret5 is not None and ret10 is not None:
-            r5_m, _, _ = get_key_metrics(ret5, params["life_expectancy"])
-            r10_m, _, _ = get_key_metrics(ret10, params["life_expectancy"])
-            r5_txt = "고갈 없음 ✅" if not r5_m else f"{r5_m['year']}년 ({r5_m['age']}세)"
-            r10_txt = "고갈 없음 ✅" if not r10_m else f"{r10_m['year']}년 ({r10_m['age']}세)"
-            info_parts += [f"수익률 5%: {r5_txt}", f"수익률 10%: {r10_txt}"]
-        st.info(" | ".join(info_parts))
+        st.info(f"저축 강화: {d2_txt} | 은퇴 연장: {d3_txt}")
     except Exception: pass
 
     try:
