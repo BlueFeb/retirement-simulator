@@ -32,7 +32,8 @@ def _get_colors(dark_mode):
     }
 
 
-def chart_main(df, retire_age, dep_info, dark_mode=False):
+def chart_main(df, retire_age, dep_info, dark_mode=False, return_variants=None):
+    """메인 순자산 추이 차트. return_variants: list of (label, df) for simple mode return rate comparison."""
     c = _get_colors(dark_mode)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -40,9 +41,20 @@ def chart_main(df, retire_age, dep_info, dark_mode=False):
         line=dict(color=c["yellow"], width=2, dash="dot"),
         fill="tozeroy", fillcolor=c["yellow_fill"]))
     fig.add_trace(go.Scatter(
-        x=df["age"], y=df["net_worth"], mode="lines", name="내 순자산",
+        x=df["age"], y=df["net_worth"], mode="lines", name="내 순자산 (현재)",
         line=dict(color=c["indigo"], width=3),
         fill="tozeroy", fillcolor=c["indigo_fill"]))
+
+    # 수익률별 변형 라인 (간단 모드)
+    if return_variants:
+        variant_colors = ["#06b6d4", "#f59e0b", "#ec4899"]  # cyan, amber, pink
+        for i, (label, vdf) in enumerate(return_variants):
+            color = variant_colors[i % len(variant_colors)]
+            fig.add_trace(go.Scatter(
+                x=vdf["age"], y=vdf["net_worth"], mode="lines", name=label,
+                line=dict(color=color, width=1.5, dash="dash"),
+                opacity=0.7))
+
     fig.add_vline(x=retire_age, line_dash="dash", line_color=c["yellow"],
                   annotation_text="은퇴", annotation_font_color=c["yellow"])
     if dep_info:
@@ -51,8 +63,8 @@ def chart_main(df, retire_age, dep_info, dark_mode=False):
     fig.add_hline(y=0, line_color=c["grid"])
     fig.update_layout(
         template=c["template"], paper_bgcolor=c["paper"], plot_bgcolor=c["bg"],
-        height=350, margin=dict(l=5,r=5,t=30,b=40),
-        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=11)),
+        height=400, margin=dict(l=5,r=5,t=30,b=40),
+        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=10)),
         xaxis_title="나이", yaxis_title="만원", xaxis=dict(dtick=10),
         yaxis=dict(tickformat=","), hovermode="x unified", dragmode=False,
         font=dict(color=c["text"]))
@@ -201,7 +213,20 @@ def generate_chart_images_for_pdf(df, params, dep_info, retire_age,
     ax.fill_between(df["age"], df["avg_peer"], alpha=0.08, color="#d97706")
     ax.plot(df["age"], df["avg_peer"], "--", color="#d97706", linewidth=1.5, label="동연령 평균")
     ax.fill_between(df["age"], df["net_worth"], alpha=0.1, color="#4f46e5")
-    ax.plot(df["age"], df["net_worth"], color="#4f46e5", linewidth=2.5, label="내 순자산")
+    ax.plot(df["age"], df["net_worth"], color="#4f46e5", linewidth=2.5, label="내 순자산 (현재)")
+
+    # 간단 모드: 수익률 5%, 10%, 15% 변형
+    if params.get("mode") == "simple":
+        from engine import run_simulation as _run_sim
+        variant_colors = ["#06b6d4", "#f59e0b", "#ec4899"]
+        for rate, vc in zip([5, 10, 15], variant_colors):
+            try:
+                vdf = _run_sim(params, {"avg_return": float(rate)})
+                ax.plot(vdf["age"], vdf["net_worth"], "--", color=vc, linewidth=1.2,
+                        alpha=0.7, label=f"수익률 {rate}%")
+            except Exception:
+                pass
+
     ax.axvline(x=retire_age, color="#d97706", linestyle="--", alpha=0.5)
     ax.text(retire_age+0.5, ax.get_ylim()[1]*0.9, "은퇴", fontsize=9, color="#d97706")
     if dep_info:
@@ -210,7 +235,7 @@ def generate_chart_images_for_pdf(df, params, dep_info, retire_age,
     ax.axhline(y=0, color="gray", linewidth=0.5)
     ax.set_xlabel("나이"); ax.set_ylabel("만원")
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(_fmt_ytick))
-    ax.legend(fontsize=9); ax.grid(alpha=0.15)
+    ax.legend(fontsize=8, loc="upper left"); ax.grid(alpha=0.15)
     ax.set_title("순자산 추이", fontsize=13, fontweight="bold", color="#4338ca")
     _save(fig, "main")
 
