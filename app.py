@@ -237,6 +237,9 @@ def main():
                 opt, base_sens, pess = run_sensitivity(params)
                 fire = calc_fire_index(params)
                 safe = calc_safe_withdrawal(params)
+                # 간단 모드: 수익률 5%, 10% 시나리오
+                ret5 = run_simulation(params, {"avg_return": 5.0}) if params.get("mode") == "simple" else None
+                ret10 = run_simulation(params, {"avg_return": 10.0}) if params.get("mode") == "simple" else None
             except Exception as e:
                 st.error(f"계산 오류: {e}")
                 return
@@ -245,7 +248,8 @@ def main():
             df=df, dep_info=dep_info, peak_info=peak_info,
             current_info=current_info, base=base, s2=s2, s3=s3,
             opt=opt, base_sens=base_sens, pess=pess,
-            fire=fire, safe=safe, params=params)
+            fire=fire, safe=safe, params=params,
+            ret5=ret5, ret10=ret10)
         st.session_state.pop("pdf_cache", None)
         st.session_state.pop("csv_cache", None)
 
@@ -266,6 +270,7 @@ def main():
     current_info = r["current_info"]; base = r["base"]; s2 = r["s2"]; s3 = r["s3"]
     opt = r["opt"]; base_sens = r["base_sens"]; pess = r["pess"]
     fire = r["fire"]; safe = r["safe"]; params = r["params"]
+    ret5 = r.get("ret5"); ret10 = r.get("ret10")
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
@@ -323,15 +328,7 @@ def main():
 
     try:
         st.subheader("📊 순자산 추이")
-        # 간단 모드: 수익률별 시뮬레이션 추가
-        return_variants = None
-        if params.get("mode") == "simple":
-            return_variants = []
-            for rate in [5, 10, 15]:
-                vdf = run_simulation(params, {"avg_return": float(rate)})
-                return_variants.append((f"수익률 {rate}%", vdf))
-            st.caption("점선: 자산 수익률이 연 5% / 10% / 15%일 때")
-        fig_main = chart_main(df, params["retire_age"], dep_info, dark, return_variants)
+        fig_main = chart_main(df, params["retire_age"], dep_info, dark)
         st.plotly_chart(fig_main, use_container_width=True, config=pcfg)
     except Exception as e:
         st.warning(f"차트 오류: {e}")
@@ -350,14 +347,29 @@ def main():
 
     try:
         st.subheader("🔀 시나리오 비교")
-        st.caption("① 현재 계획 · ② 저축 강화 · ③ 은퇴 3년 연장")
-        st.plotly_chart(chart_scenarios(base, s2, s3, params["retire_age"], dark),
-                        use_container_width=True, config=pcfg)
+        if params.get("mode") == "simple" and ret5 is not None and ret10 is not None:
+            st.caption("① 현재 계획 · ② 저축 강화 · ③ 은퇴 3년 연장 · ④ 수익률 5% · ⑤ 수익률 10%")
+            st.plotly_chart(chart_scenarios(base, s2, s3, params["retire_age"], dark,
+                                           extra=[(ret5, "수익률 5%"), (ret10, "수익률 10%")]),
+                            use_container_width=True, config=pcfg)
+        else:
+            st.caption("① 현재 계획 · ② 저축 강화 · ③ 은퇴 3년 연장")
+            st.plotly_chart(chart_scenarios(base, s2, s3, params["retire_age"], dark),
+                            use_container_width=True, config=pcfg)
+
+        # 시나리오 요약 텍스트
         d2_m, _, _ = get_key_metrics(s2, params["life_expectancy"])
         d3_m, _, _ = get_key_metrics(s3, params["life_expectancy"])
         d2_txt = "고갈 없음 ✅" if not d2_m else f"{d2_m['year']}년 ({d2_m['age']}세)"
         d3_txt = "고갈 없음 ✅" if not d3_m else f"{d3_m['year']}년 ({d3_m['age']}세)"
-        st.info(f"저축 강화: {d2_txt} | 은퇴 연장: {d3_txt}")
+        info_parts = [f"저축 강화: {d2_txt}", f"은퇴 연장: {d3_txt}"]
+        if params.get("mode") == "simple" and ret5 is not None and ret10 is not None:
+            r5_m, _, _ = get_key_metrics(ret5, params["life_expectancy"])
+            r10_m, _, _ = get_key_metrics(ret10, params["life_expectancy"])
+            r5_txt = "고갈 없음 ✅" if not r5_m else f"{r5_m['year']}년 ({r5_m['age']}세)"
+            r10_txt = "고갈 없음 ✅" if not r10_m else f"{r10_m['year']}년 ({r10_m['age']}세)"
+            info_parts += [f"수익률 5%: {r5_txt}", f"수익률 10%: {r10_txt}"]
+        st.info(" | ".join(info_parts))
     except Exception: pass
 
     try:
