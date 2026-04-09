@@ -326,6 +326,22 @@ def main():
                      use_container_width=True, hide_index=True)
     except Exception: pass
 
+    # ━━ 맞춤형 조언 ━━
+    try:
+        st.subheader("💬 맞춤형 조언")
+        advice_tips = generate_advice(df, params, dep_info, peak_info, current_info, scenarios, fire)
+        for tip in advice_tips:
+            icon = tip["icon"]
+            title = tip["title"]
+            body = tip["body"]
+            st.markdown(f"""<div style="background:rgba(79,70,229,0.04);border:1px solid rgba(79,70,229,0.12);
+                border-radius:12px;padding:16px 18px;margin:10px 0">
+                <div style="font-size:15px;font-weight:700;margin-bottom:6px">{icon} {title}</div>
+                <div style="font-size:13.5px;line-height:1.7;color:#374151">{body}</div>
+                </div>""", unsafe_allow_html=True)
+    except Exception:
+        pass
+
     st.subheader("\U0001f4e5 \ubcf4\uace0\uc11c & \ub370\uc774\ud130")
     if "pdf_cache" not in st.session_state:
         try:
