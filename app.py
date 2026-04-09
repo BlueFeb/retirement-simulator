@@ -12,6 +12,7 @@ from charts import (chart_combined, chart_composition, chart_pie, chart_cashflow
 from report_pdf import generate_pdf_report
 from gsheet import get_gsheet_connection, save_to_gsheet
 from theme import get_css, get_header_color, get_diff_colors
+from advice import generate_advice
 
 D_AGE=35; D_RETIRE=60; D_LIFE=85; D_INFL=2.5
 D_TS=10000; D_MI=400; D_ME=250
