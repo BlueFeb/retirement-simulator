@@ -1,4 +1,4 @@
-"""차트 생성 모듈 — 통합 버전"""
+"""차트 생성 모듈 — v3: hover 상세, 실질가치 토글"""
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import io
@@ -21,10 +21,18 @@ SCENARIO_STYLES = {
     "매년 5% 수익":         {"color":"#06b6d4","dash":"dash","width":1.8,"fill":False},
     "매년 10% 수익":        {"color":"#f59e0b","dash":"dash","width":1.8,"fill":False},
     "매년 15% 수익":        {"color":"#ec4899","dash":"dash","width":1.8,"fill":False},
+    "실질 순자산 (현재가치)": {"color":"#a78bfa","dash":"dashdot","width":2,"fill":False},
 }
 
+ALL_SCENARIO_LABELS = list(SCENARIO_STYLES.keys())
+
+def _fmt_hover(v):
+    """hover용 금액 포맷"""
+    if abs(v) >= 10000:
+        return f"{v/10000:,.1f}억"
+    return f"{v:,.0f}만원"
+
 def chart_combined(scenarios, selected, retire_age, dep_info, dark_mode=False):
-    """통합 순자산 추이 & 시나리오 비교 차트. 토글로 선택된 시나리오만 표시."""
     c = _get_colors(dark_mode)
     fig = go.Figure()
     for label in selected:
@@ -32,20 +40,51 @@ def chart_combined(scenarios, selected, retire_age, dep_info, dark_mode=False):
         sdf = scenarios[label]
         style = SCENARIO_STYLES.get(label, {})
         lc = style.get("color", c.get(style.get("color_key","gray"),"#888"))
-        y_data = sdf["avg_peer"] if label == "동연령 평균" else sdf["net_worth"]
-        kw = dict(x=sdf["age"],y=y_data,mode="lines",name=label,
-                  line=dict(color=lc,width=style.get("width",2),dash=style.get("dash","solid")))
+
+        # 데이터 컬럼
+        if label == "동연령 평균":
+            y_data = sdf["avg_peer"]
+        elif label == "실질 순자산 (현재가치)":
+            y_data = sdf["real_net_worth"] if "real_net_worth" in sdf.columns else sdf["net_worth"]
+        else:
+            y_data = sdf["net_worth"]
+
+        # hover 상세 (#17)
+        hover_texts = []
+        for _, row in sdf.iterrows():
+            age_v = int(row["age"]); year_v = int(row["year"])
+            nw_v = _fmt_hover(row["net_worth"])
+            peer_v = _fmt_hover(row["avg_peer"])
+            real_v = _fmt_hover(row.get("real_net_worth", row["net_worth"]))
+            parts = [f"<b>{year_v}년 ({age_v}세)</b>",
+                     f"순자산: {nw_v}",
+                     f"동연령: {peer_v}",
+                     f"실질가치: {real_v}"]
+            if "deposit" in sdf.columns:
+                parts.append(f"예금: {_fmt_hover(row['deposit'])}")
+                parts.append(f"주식: {_fmt_hover(row['stock'])}")
+                parts.append(f"부동산: {_fmt_hover(row['real_estate'])}")
+                parts.append(f"대출: {_fmt_hover(row['loan'])}")
+            hover_texts.append("<br>".join(parts))
+
+        kw = dict(x=sdf["age"], y=y_data, mode="lines", name=label,
+                  line=dict(color=lc, width=style.get("width",2), dash=style.get("dash","solid")),
+                  hovertext=hover_texts, hoverinfo="text")
         if style.get("fill") and label == "현재 계획 (은행이자)":
             kw["fill"] = "tozeroy"; kw["fillcolor"] = c["indigo_fill"]
         fig.add_trace(go.Scatter(**kw))
-    fig.add_vline(x=retire_age,line_dash="dash",line_color=c["yellow"],annotation_text="은퇴",annotation_font_color=c["yellow"])
-    if dep_info: fig.add_vline(x=dep_info["age"],line_dash="dash",line_color=c["red"],annotation_text="고갈",annotation_font_color=c["red"])
-    fig.add_hline(y=0,line_color=c["grid"])
-    fig.update_layout(template=c["template"],paper_bgcolor=c["paper"],plot_bgcolor=c["bg"],height=420,
-        margin=dict(l=5,r=5,t=30,b=40),
-        legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5,font=dict(size=10)),
-        xaxis_title="나이",yaxis_title="만원",xaxis=dict(dtick=10),
-        yaxis=dict(tickformat=","),hovermode="x unified",dragmode=False,font=dict(color=c["text"]))
+
+    fig.add_vline(x=retire_age, line_dash="dash", line_color=c["yellow"],
+                  annotation_text="은퇴", annotation_font_color=c["yellow"])
+    if dep_info:
+        fig.add_vline(x=dep_info["age"], line_dash="dash", line_color=c["red"],
+                      annotation_text="고갈", annotation_font_color=c["red"])
+    fig.add_hline(y=0, line_color=c["grid"])
+    fig.update_layout(template=c["template"], paper_bgcolor=c["paper"], plot_bgcolor=c["bg"],
+        height=420, margin=dict(l=5,r=5,t=30,b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
+        xaxis_title="나이", yaxis_title="만원", xaxis=dict(dtick=10),
+        yaxis=dict(tickformat=","), hovermode="x", dragmode=False, font=dict(color=c["text"]))
     return fig
 
 def chart_composition(df, dark_mode=False):
@@ -74,10 +113,13 @@ def chart_pie(params, dark_mode=False):
 
 def chart_cashflow(params, dark_mode=False):
     c = _get_colors(dark_mode)
+    retire_inc = params.get("retire_income", 0)
     if params["mode"]=="simple":
         inc=params["monthly_income"]; exp=params["monthly_expense"]
         cats_pre=["급여","지출","잔여"]; vals_pre=[inc,-exp,inc-exp]
-        cats_post=["급여","지출","부족분"]; vals_post=[0,-exp,-exp]
+        post_inc = retire_inc
+        cats_post=["은퇴후소득","지출","부족분"] if post_inc > 0 else ["급여","지출","부족분"]
+        vals_post=[post_inc,-exp,post_inc-exp]
     else:
         sal=params["salary"]+params["side_income"]; pen=params["pension_monthly"]
         exp=params["fixed_cost"]+params["variable_cost"]; loan_mp=0
@@ -87,8 +129,9 @@ def chart_cashflow(params, dark_mode=False):
                 loan_mp += l["amount"]*mr*((1+mr)**np_)/(((1+mr)**np_)-1) if mr>0 else l["amount"]/np_
         cats_pre=["급여+부수입","고정비","변동비","대출","잔여"]
         vals_pre=[sal,-params["fixed_cost"],-params["variable_cost"],-round(loan_mp),round(sal-exp-loan_mp)]
-        cats_post=["국민연금","고정비","변동비","부족분"]
-        vals_post=[pen,-params["fixed_cost"],-params["variable_cost"],round(pen-exp)]
+        post_inc = retire_inc + pen
+        cats_post=["연금+소득","고정비","변동비","부족분"]
+        vals_post=[round(post_inc),-params["fixed_cost"],-params["variable_cost"],round(post_inc-exp)]
     fig = make_subplots(rows=1,cols=2,subplot_titles=["은퇴 전 (월)","은퇴 후 (월)"],horizontal_spacing=0.15)
     fig.add_trace(go.Bar(x=cats_pre,y=vals_pre,marker_color=[c["green"] if v>=0 else c["red"] for v in vals_pre],
         text=[f"{v:+,}" for v in vals_pre],textposition="outside"),row=1,col=1)
@@ -129,16 +172,19 @@ def generate_chart_images_for_pdf(df, params, dep_info, retire_age, scenarios_di
         if abs(val)>=10000: return f"{val/10000:.0f}억"
         if abs(val)>=1000: return f"{val/1000:.0f}천"
         return f"{val:.0f}"
-    # 1. 통합 차트
     fig,ax = plt.subplots(figsize=(7,4))
     if scenarios_dict:
         styles = [("현재 계획 (은행이자)","#4f46e5","-",2.5),("동연령 평균","#d97706","--",1.5),
                   ("저축 강화","#059669","--",1.5),("은퇴 3년 연장","#64748b",":",1.5),
-                  ("매년 5% 수익","#06b6d4","--",1.5),("매년 10% 수익","#f59e0b","--",1.5),("매년 15% 수익","#ec4899","--",1.5)]
+                  ("매년 5% 수익","#06b6d4","--",1.5),("매년 10% 수익","#f59e0b","--",1.5),
+                  ("매년 15% 수익","#ec4899","--",1.5),("실질 순자산 (현재가치)","#a78bfa","-.",1.5)]
         for label,color,ls,lw in styles:
             sdf = scenarios_dict.get(label)
             if sdf is None: continue
-            col = "avg_peer" if label=="동연령 평균" else "net_worth"
+            if label=="동연령 평균": col="avg_peer"
+            elif label=="실질 순자산 (현재가치)": col="real_net_worth"
+            else: col="net_worth"
+            if col not in sdf.columns: continue
             ax.plot(sdf["age"],sdf[col],linestyle=ls,color=color,linewidth=lw,label=label,alpha=0.85)
     else:
         ax.plot(df["age"],df["avg_peer"],"--",color="#d97706",linewidth=1.5,label="동연령 평균")
@@ -148,7 +194,6 @@ def generate_chart_images_for_pdf(df, params, dep_info, retire_age, scenarios_di
     ax.axhline(y=0,color="gray",linewidth=0.5); ax.set_xlabel("나이"); ax.set_ylabel("만원")
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(_yt)); ax.legend(fontsize=7,loc="upper left"); ax.grid(alpha=0.15)
     ax.set_title("순자산 추이 & 시나리오 비교",fontsize=13,fontweight="bold",color="#4338ca"); _save(fig,"main")
-    # 2. 파이
     if params.get("mode")=="detailed":
         labels=[]; sizes=[]; colors=[]
         for nm,val,cc in [("예금",params.get("deposit_amount",0),"#059669"),("주식",params.get("stock_amount",0),"#4f46e5"),
@@ -159,15 +204,14 @@ def generate_chart_images_for_pdf(df, params, dep_info, retire_age, scenarios_di
         if sizes:
             fig,ax = plt.subplots(figsize=(5,3)); ax.pie(sizes,labels=labels,colors=colors,autopct="%1.0f%%",startangle=90,pctdistance=0.75,wedgeprops=dict(width=0.45))
             ax.set_title("현재 자산 구성",fontsize=13,fontweight="bold",color="#4338ca"); _save(fig,"pie")
-    # 3. 구성 변화
     if "deposit" in df.columns:
         fig,ax = plt.subplots(figsize=(7,3)); ax.stackplot(df["age"],df["deposit"],df["stock"],df["real_estate"],labels=["예금","주식","부동산"],colors=["#059669","#4f46e5","#d97706"],alpha=0.7)
         ax.plot(df["age"],-df["loan"],"--",color="#dc2626",linewidth=1.5,label="대출"); ax.set_xlabel("나이"); ax.yaxis.set_major_formatter(ticker.FuncFormatter(_yt))
         ax.legend(fontsize=8); ax.grid(alpha=0.15); ax.set_title("자산 구성 변화",fontsize=13,fontweight="bold",color="#4338ca"); _save(fig,"composition")
-    # 4. 민감도
     if opt_df is not None and pess_df is not None and base_df is not None:
-        fig,ax = plt.subplots(figsize=(7,3)); ax.fill_between(opt_df["age"],opt_df["net_worth"],pess_df["net_worth"],alpha=0.08,color="#4f46e5",label="변동 범위")
-        ax.plot(opt_df["age"],opt_df["net_worth"],color="#059669",linewidth=1,label="낙관"); ax.plot(base_df["age"],base_df["net_worth"],color="#4f46e5",linewidth=2.5,label="기본")
+        fig,ax = plt.subplots(figsize=(7,3)); ax.fill_between(opt_df["age"],opt_df["net_worth"],pess_df["net_worth"],alpha=0.08,color="#4f46e5")
+        ax.plot(opt_df["age"],opt_df["net_worth"],color="#059669",linewidth=1,label="낙관")
+        ax.plot(base_df["age"],base_df["net_worth"],color="#4f46e5",linewidth=2.5,label="기본")
         ax.plot(pess_df["age"],pess_df["net_worth"],color="#dc2626",linewidth=1,label="비관"); ax.axhline(y=0,color="gray",linewidth=0.5)
         ax.set_xlabel("나이"); ax.yaxis.set_major_formatter(ticker.FuncFormatter(_yt)); ax.legend(fontsize=9); ax.grid(alpha=0.15)
         ax.set_title("민감도 분석",fontsize=13,fontweight="bold",color="#4338ca"); _save(fig,"sensitivity")
