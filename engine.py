@@ -1,5 +1,5 @@
 """
-시뮬레이션 엔진 — 안정화 버전
+시뮬레이션 엔진 — v3: 월 단위 통합, 실질가치, 은퇴후 소득
 """
 import pandas as pd
 
@@ -30,10 +30,8 @@ def interp_nw(age, gender):
 
 
 def fmt_krw(v):
-    try:
-        v = float(v)
-    except (TypeError, ValueError):
-        return "0원"
+    try: v = float(v)
+    except (TypeError, ValueError): return "0원"
     if v == 0: return "0원"
     sign = "-" if v < 0 else ""
     a = abs(v)
@@ -42,11 +40,8 @@ def fmt_krw(v):
 
 
 def amount_to_korean(val_man):
-    """만원 단위 → 한글 자연어."""
-    try:
-        val_man = float(val_man)
-    except (TypeError, ValueError):
-        return "0원"
+    try: val_man = float(val_man)
+    except (TypeError, ValueError): return "0원"
     if val_man == 0: return "0원"
     sign = "마이너스 " if val_man < 0 else ""
     won = abs(val_man) * 10000
@@ -77,12 +72,9 @@ def _init_loans(loans_raw):
         if b > 0 and yr > 0:
             mr = r/12; np_ = yr*12
             if mr > 0:
-                try:
-                    mp = b*mr*((1+mr)**np_)/(((1+mr)**np_)-1)
-                except (OverflowError, ZeroDivisionError):
-                    mp = b / np_
-            else:
-                mp = b / np_
+                try: mp = b*mr*((1+mr)**np_)/(((1+mr)**np_)-1)
+                except (OverflowError, ZeroDivisionError): mp = b / np_
+            else: mp = b / np_
         ls.append({"bal": b, "rate": r, "mp": mp})
     return ls
 
@@ -97,7 +89,7 @@ def run_simulation(p, override=None):
     gender = params.get("gender", "male")
 
     if c_age >= life:
-        return pd.DataFrame([{"age":c_age,"year":2026,"net_worth":0,"avg_peer":interp_nw(c_age,gender)}])
+        return pd.DataFrame([{"age":c_age,"year":2026,"net_worth":0,"real_net_worth":0,"avg_peer":interp_nw(c_age,gender)}])
 
     rows = []
 
@@ -105,31 +97,49 @@ def run_simulation(p, override=None):
         nw = _safe_float(params.get("total_savings", 0))
         m_inc = _safe_float(params.get("monthly_income", 0))
         m_exp = _safe_float(params.get("monthly_expense", 0))
+        # 은퇴 후 부분 소득 (#14)
+        m_retire_inc = _safe_float(params.get("retire_income", 0))
         ann_ret = _safe_float(params.get("avg_return", DEP_RATE)) / 100
-        monthly_ret = (1 + ann_ret) ** (1/12) - 1  # 연 수익률 → 월 복리 수익률
+        monthly_ret = (1 + ann_ret) ** (1/12) - 1
 
         for y in range(c_age, life+1):
             el = y - c_age
+            # 실질가치: 현재 가치 기준으로 할인
+            deflator = (1 + infl) ** el if infl > 0 else 1
+            real_nw = round(nw / deflator) if deflator > 0 else round(nw)
             rows.append({"age":y, "year":2026+el,
-                         "net_worth":round(nw), "avg_peer":interp_nw(y, gender)})
-            # 12개월 각각 월초 순자산 기준으로 수익 + 수입 - 지출 계산
-            m_exp_now = m_exp * ((1 + infl) ** el)  # 물가 반영된 이번 해 월 지출
-            m_inc_now = m_inc if y < retire else 0
+                         "net_worth":round(nw), "real_net_worth":real_nw,
+                         "avg_peer":interp_nw(y, gender)})
+            # 월 단위 계산 — 물가상승 반영
+            # 지출: 물가 100% 반영
+            m_exp_now = m_exp * ((1 + infl) ** el)
+            # 수입: 급여는 물가의 70% 인상, 은퇴 후 소득은 물가 50% 인상
+            if y < retire:
+                m_inc_now = m_inc * ((1 + infl * 0.7) ** el)
+            else:
+                m_inc_now = m_retire_inc * ((1 + infl * 0.5) ** el)
             for _ in range(12):
                 nw = nw * (1 + monthly_ret) + m_inc_now - m_exp_now
+
     else:
+        # ━━ 상세 모드 — 월 단위로 전환 (#16) ━━
         dep = _safe_float(params.get("deposit_amount", 0))
         stk = _safe_float(params.get("stock_amount", 0))
         re_ = _safe_float(params.get("real_estate_amount", 0))
         oth = _safe_float(params.get("other_assets", 0))
-        dR = _safe_float(params.get("deposit_rate", 2.83)) / 100
-        sR = _safe_float(params.get("stock_return", 10)) / 100
-        rR = _safe_float(params.get("real_estate_return", 2.5)) / 100
+        dR_ann = _safe_float(params.get("deposit_rate", 2.83)) / 100
+        sR_ann = _safe_float(params.get("stock_return", 10)) / 100
+        rR_ann = _safe_float(params.get("real_estate_return", 2.5)) / 100
 
-        # avg_return 오버라이드: 수익률 시나리오에서 모든 자산에 통합 수익률 적용
         if "avg_return" in params:
             unified = _safe_float(params["avg_return"]) / 100
-            dR = unified; sR = unified; rR = unified
+            dR_ann = unified; sR_ann = unified; rR_ann = unified
+
+        # 월 복리 수익률
+        dR_m = (1 + dR_ann) ** (1/12) - 1
+        sR_m = (1 + sR_ann) ** (1/12) - 1
+        rR_m = (1 + rR_ann) ** (1/12) - 1
+
         mSal = _safe_float(params.get("salary", 0))
         mSide = _safe_float(params.get("side_income", 0))
         mPen = _safe_float(params.get("pension_monthly", 0))
@@ -137,6 +147,8 @@ def run_simulation(p, override=None):
         mFix = _safe_float(params.get("fixed_cost", 0))
         mVar = _safe_float(params.get("variable_cost", 0))
         svR = _safe_float(params.get("savings_rate", 30)) / 100
+        # 은퇴 후 부분 소득 (#14)
+        m_retire_inc = _safe_float(params.get("retire_income", 0))
 
         ls = _init_loans(params.get("loans"))
 
@@ -144,33 +156,61 @@ def run_simulation(p, override=None):
             el = y - c_age
             tl = sum(l["bal"] for l in ls)
             nw = dep + stk + re_ + oth - tl
+            deflator = (1 + infl) ** el if infl > 0 else 1
+            real_nw = round(nw / deflator) if deflator > 0 else round(nw)
+
             rows.append({"age":y, "year":2026+el, "net_worth":round(nw),
+                          "real_net_worth":real_nw,
                           "deposit":round(dep), "stock":round(stk),
                           "real_estate":round(re_), "loan":round(tl),
                           "avg_peer":interp_nw(y, gender)})
 
-            ann_inc = (mSal+mSide)*12 if y < retire else 0
-            pen_inc = mPen*12 if y >= penS else 0
-            var_exp = mVar*12*((1+infl)**el)
-            fix_exp = mFix*12*((1+infl*0.5)**el)
-            ann_exp = var_exp + fix_exp
-            ann_loan = sum(l["mp"]*12 for l in ls if l["bal"] > 0)
-            ncf = ann_inc + pen_inc - ann_exp - ann_loan
-
-            dep += dep*dR; stk += stk*sR; re_ += re_*rR
-            if ncf > 0:
-                sv = ncf*svR; dep += sv*0.4; stk += sv*0.6
+            # 월별 계산 — 물가상승 반영
+            # 지출: 변동비 물가 100%, 고정비 물가 50%
+            m_var_now = mVar * ((1 + infl) ** el)
+            m_fix_now = mFix * ((1 + infl * 0.5) ** el)
+            m_exp_now = m_var_now + m_fix_now
+            # 수입: 급여+부수입 물가의 70% 인상, 연금 물가 100% 연동, 은퇴후소득 물가 50%
+            if y < retire:
+                m_inc_now = (mSal + mSide) * ((1 + infl * 0.7) ** el)
             else:
-                deficit = ncf
-                if dep+deficit >= 0: dep += deficit
+                m_inc_now = m_retire_inc * ((1 + infl * 0.5) ** el)
+            m_pen_now = mPen * ((1 + infl) ** el) if y >= penS else 0
+            m_loan_pay = sum(l["mp"] for l in ls if l["bal"] > 0)
+
+            for _ in range(12):
+                # 자산별 월 수익
+                dep *= (1 + dR_m)
+                stk *= (1 + sR_m)
+                re_ *= (1 + rR_m)
+
+                # 월 순현금흐름
+                ncf = m_inc_now + m_pen_now - m_exp_now - m_loan_pay
+
+                if ncf > 0:
+                    sv = ncf * svR
+                    dep += sv * 0.4
+                    stk += sv * 0.6
                 else:
-                    deficit += dep; dep = 0
-                    if stk+deficit >= 0: stk += deficit
-                    else: deficit += stk; stk = 0; re_ += deficit
-            for l in ls:
-                if l["bal"] > 0:
-                    l["bal"] = max(0, l["bal"] - (l["mp"]*12 - l["bal"]*l["rate"]))
-            dep = max(dep, 0); stk = max(stk, 0)
+                    deficit = ncf
+                    if dep + deficit >= 0:
+                        dep += deficit
+                    else:
+                        deficit += dep; dep = 0
+                        if stk + deficit >= 0:
+                            stk += deficit
+                        else:
+                            deficit += stk; stk = 0
+                            re_ += deficit
+
+                # 대출 상환
+                for l in ls:
+                    if l["bal"] > 0:
+                        interest = l["bal"] * l["rate"] / 12
+                        principal = l["mp"] - interest
+                        l["bal"] = max(0, l["bal"] - principal)
+
+            dep = max(dep, 0); stk = max(stk, 0); re_ = max(re_, 0)
 
     return pd.DataFrame(rows)
 
@@ -178,18 +218,14 @@ def run_simulation(p, override=None):
 def get_key_metrics(df, life_exp):
     if df.empty:
         return None, {"net_worth":0,"age":0,"year":2026}, {"net_worth":0,"avg_peer":0}
-
     dep_df = df[df["net_worth"] <= 0].head(1)
     dep_info = None
     if not dep_df.empty:
         dep_info = {"year":int(dep_df.iloc[0]["year"]), "age":int(dep_df.iloc[0]["age"])}
-
     pk = df.loc[df["net_worth"].idxmax()]
     peak_info = {"net_worth":int(pk["net_worth"]), "age":int(pk["age"]), "year":int(pk["year"])}
-
     cur = df.iloc[0]
     current_info = {"net_worth":int(cur["net_worth"]), "avg_peer":int(cur["avg_peer"])}
-
     return dep_info, peak_info, current_info
 
 
@@ -210,8 +246,8 @@ def run_sensitivity(params):
         opt = run_simulation(params, {"inflation_rate": max(ir - 1, 0)})
         pess = run_simulation(params, {"inflation_rate": ir + 1.5})
     else:
-        sr = _safe_float(params.get("stock_return", 7))
-        rr = _safe_float(params.get("real_estate_return", 3))
+        sr = _safe_float(params.get("stock_return", 10))
+        rr = _safe_float(params.get("real_estate_return", 2.5))
         opt = run_simulation(params, {"stock_return":sr+2, "real_estate_return":rr+1, "inflation_rate":max(ir-1,0)})
         pess = run_simulation(params, {"stock_return":max(sr-3,-5), "real_estate_return":max(rr-2,-5), "inflation_rate":ir+1.5})
     return opt, base, pess
@@ -230,7 +266,6 @@ def calc_fire_index(params):
                           - sum(_safe_float(l.get("amount",0)) for l in params.get("loans", [])))
             monthly_save = (_safe_float(params.get("salary",0)) + _safe_float(params.get("side_income",0))
                             - _safe_float(params.get("fixed_cost",0)) - _safe_float(params.get("variable_cost",0)))
-
         fire_target = annual_exp * 25
         if fire_target <= 0:
             return {"target":0, "current":current_nw, "progress":100, "years_left":0, "monthly_save":monthly_save}
@@ -239,11 +274,9 @@ def calc_fire_index(params):
         if monthly_save <= 0:
             progress = round(current_nw/fire_target*100, 1) if fire_target > 0 else 0
             return {"target":fire_target, "current":current_nw, "progress":progress, "years_left":-1, "monthly_save":monthly_save}
-
         nw = current_nw; years = 0
         while nw < fire_target and years < 100:
-            nw = nw * 1.05 + monthly_save * 12
-            years += 1
+            nw = nw * 1.05 + monthly_save * 12; years += 1
         progress = round(min(current_nw/fire_target*100, 100), 1)
         return {"target":fire_target, "current":current_nw, "progress":progress, "years_left":years, "monthly_save":monthly_save}
     except Exception:
@@ -257,16 +290,13 @@ def calc_safe_withdrawal(params):
         years_in_retirement = life - retire
         if years_in_retirement <= 0:
             return {"retire_nw":0, "safe_monthly":0, "years":0, "pension_monthly":0}
-
         df = run_simulation(params)
         retire_row = df[df["age"] == retire]
         if retire_row.empty:
             return {"retire_nw":0, "safe_monthly":0, "years":years_in_retirement, "pension_monthly":0}
-
         retire_nw = float(retire_row.iloc[0]["net_worth"])
         if retire_nw <= 0:
             return {"retire_nw":retire_nw, "safe_monthly":0, "years":years_in_retirement, "pension_monthly":0}
-
         pension_annual = 0
         if params.get("mode") == "detailed":
             pen_start = _safe_int(params.get("pension_start_age", 65))
@@ -274,12 +304,9 @@ def calc_safe_withdrawal(params):
                 pension_years = life - max(retire, pen_start)
                 if pension_years > 0:
                     pension_annual = _safe_float(params.get("pension_monthly", 0)) * 12
-
         total_available = retire_nw
         for y in range(years_in_retirement):
-            total_available *= 1.03
-            total_available += pension_annual
-
+            total_available *= 1.03; total_available += pension_annual
         safe_monthly = max(0, total_available / years_in_retirement * 0.85 / 12)
         pm = _safe_float(params.get("pension_monthly", 0)) if params.get("mode") == "detailed" else 0
         return {"retire_nw":retire_nw, "safe_monthly":round(safe_monthly), "years":years_in_retirement, "pension_monthly":pm}
