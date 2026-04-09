@@ -150,7 +150,6 @@ def run_simulation(p, override=None):
         penS = _safe_int(params.get("pension_start_age", 65))
         mFix = _safe_float(params.get("fixed_cost", 0))
         mVar = _safe_float(params.get("variable_cost", 0))
-        svR = _safe_float(params.get("savings_rate", 30)) / 100
         # 은퇴 후 부분 소득 (#14)
         m_retire_inc = _safe_float(params.get("retire_income", 0))
 
@@ -192,9 +191,9 @@ def run_simulation(p, override=None):
                 ncf = m_inc_now + m_pen_now - m_exp_now - m_loan_pay
 
                 if ncf > 0:
-                    sv = ncf * svR
-                    dep += sv * 0.4
-                    stk += sv * 0.6
+                    # 잉여금 전액 저축: 예금 40% + 주식 60%
+                    dep += ncf * 0.4
+                    stk += ncf * 0.6
                 else:
                     deficit = ncf
                     if dep + deficit >= 0:
@@ -238,7 +237,8 @@ def run_scenarios(params):
     if params.get("mode") == "simple":
         s2 = run_simulation(params, {"monthly_expense": max(0, _safe_float(params.get("monthly_expense",0)) - 50)})
     else:
-        s2 = run_simulation(params, {"savings_rate": min(_safe_float(params.get("savings_rate",30)) + 15, 100)})
+        # 저축 강화 = 변동비 50만원 절감
+        s2 = run_simulation(params, {"variable_cost": max(0, _safe_float(params.get("variable_cost",0)) - 50)})
     s3 = run_simulation(params, {"retire_age": _safe_int(params.get("retire_age",60)) + 3})
     return base, s2, s3
 
