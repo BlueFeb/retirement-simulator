@@ -334,11 +334,16 @@ def main():
             icon = tip["icon"]
             title = tip["title"]
             body = tip["body"]
-            st.markdown(f"""<div style="background:rgba(79,70,229,0.04);border:1px solid rgba(79,70,229,0.12);
-                border-radius:12px;padding:16px 18px;margin:10px 0">
-                <div style="font-size:15px;font-weight:700;margin-bottom:6px">{icon} {title}</div>
-                <div style="font-size:13.5px;line-height:1.7;color:#374151">{body}</div>
-                </div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div style="
+                background: linear-gradient(135deg, rgba(79,70,229,0.04), rgba(99,102,241,0.07));
+                border-left: 4px solid #6366f1;
+                border-radius: 10px;
+                padding: 16px 18px;
+                margin: 12px 0;
+                ">
+                <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#1e293b;line-height:1.4">{icon} {title}</div>
+                <div style="font-size:14px;line-height:1.8;color:#475569">{body}</div>
+            </div>""", unsafe_allow_html=True)
     except Exception:
         pass
 
@@ -348,8 +353,9 @@ def main():
             chart_imgs = generate_chart_images_for_pdf(
                 df, params, dep_info, params["retire_age"],
                 scenarios_dict=scenarios, base_df=df, opt_df=opt, pess_df=pess)
+            pdf_advice = generate_advice(df, params, dep_info, peak_info, current_info, scenarios, fire)
             st.session_state["pdf_cache"] = generate_pdf_report(
-                df, params, dep_info, peak_info, current_info, chart_imgs)
+                df, params, dep_info, peak_info, current_info, chart_imgs, advice_tips=pdf_advice)
         except Exception as e:
             st.error(f"PDF \uc0dd\uc131 \uc624\ub958: {e}")
             st.session_state["pdf_cache"] = None
