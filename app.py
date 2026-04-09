@@ -8,7 +8,7 @@ from engine import (run_simulation, get_key_metrics, run_scenarios,
                     fmt_krw, amount_to_korean, DEP_RATE, LOAN_RATE)
 from charts import (chart_combined, chart_composition, chart_pie, chart_cashflow,
                      chart_sensitivity, generate_chart_images_for_pdf,
-                     SCENARIO_STYLES)
+                     ALL_SCENARIO_LABELS)
 from report_pdf import generate_pdf_report
 from gsheet import get_gsheet_connection, save_to_gsheet
 from theme import get_css, get_header_color, get_diff_colors
@@ -108,9 +108,12 @@ def main():
         monthly_income = amt_s("\uc6d4 \uc218\uc785 \u2014 \uc138\ud6c4 (\ub9cc\uc6d0)","mi",D_MI)
         st.subheader("\U0001f4b8 \uc9c0\ucd9c")
         monthly_expense = amt_s("\uc6d4 \ud3c9\uade0 \uc9c0\ucd9c (\ub9cc\uc6d0)","me",D_ME)
+        st.subheader("💰 은퇴 후 소득")
+        retire_income = amt_s("은퇴 후 월 소득 (만원)", "ri", 0, 10, "파트타임, 임대 수입 등")
         params = dict(mode="simple",age=age,gender=gender_key,retire_age=retire_age,
                       life_expectancy=life_exp,inflation_rate=inflation_rate,
-                      total_savings=total_savings,monthly_income=monthly_income,monthly_expense=monthly_expense)
+                      total_savings=total_savings,monthly_income=monthly_income,
+                      monthly_expense=monthly_expense,retire_income=retire_income)
     else:
         st.subheader("\U0001f3e6 \ubcf4\uc720 \uc790\uc0b0")
         st.markdown("**\uc608\uae08\xb7\uc801\uae08**")
@@ -153,7 +156,7 @@ def main():
                       other_assets=other_assets,salary=salary,side_income=side_income,
                       pension_monthly=pension,pension_start_age=pension_start,
                       fixed_cost=fixed_cost,variable_cost=variable_cost,
-                      savings_rate=savings_rate,loans=loans)
+                      savings_rate=savings_rate,loans=loans,retire_income=retire_income)
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
@@ -182,6 +185,7 @@ def main():
             "\ub9e4\ub144 5% \uc218\uc775": ret5,
             "\ub9e4\ub144 10% \uc218\uc775": ret10,
             "\ub9e4\ub144 15% \uc218\uc775": ret15,
+            "실질 순자산 (현재가치)": df,
         }
         st.session_state["results"] = dict(
             df=df, dep_info=dep_info, peak_info=peak_info,
@@ -254,7 +258,7 @@ def main():
     # ━━ 통합 순자산 추이 & 시나리오 비교 ━━
     try:
         st.subheader("\U0001f4ca \uc21c\uc790\uc0b0 \ucd94\uc774 & \uc2dc\ub098\ub9ac\uc624 \ube44\uad50")
-        all_labels = list(SCENARIO_STYLES.keys())
+        all_labels = ALL_SCENARIO_LABELS
         default_on = ["\ud604\uc7ac \uacc4\ud68d (\uc740\ud589\uc774\uc790)", "\ub3d9\uc5f0\ub839 \ud3c9\uade0"]
         selected = st.multiselect("\ud45c\uc2dc\ud560 \uc2dc\ub098\ub9ac\uc624", options=all_labels, default=default_on, key="scenario_toggle")
         if selected:
