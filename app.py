@@ -18,7 +18,7 @@ D_TS=10000; D_MI=400; D_ME=250
 D_DA=3000; D_DR=2.83; D_SA=4000; D_SR=10.0
 D_REA=30000; D_RR=2.5; D_OA=0
 D_SAL=400; D_SI=0; D_PEN=80; D_PS=65
-D_FC=120; D_VC=80; D_SVR=30.0; D_NL=1
+D_FC=120; D_VC=80; D_NL=1
 D_LA=5000; D_LR=LOAN_RATE; D_LY=20
 
 def _v(key, default):
@@ -42,15 +42,15 @@ def encode_params(params):
 
 PRESETS = {
     "30\ub300 \ub3c5\uc2e0": dict(age=30,retire=60,life=85,infl=2.5,da=1500,dr=2.83,sa=2000,sr=10.0,
-        rea=0,rr=2.5,oa=0,sal=300,si=0,pen=50,ps=65,fc=60,vc=60,svr=40.0,nl=0),
+        rea=0,rr=2.5,oa=0,sal=300,si=0,pen=50,ps=65,fc=60,vc=60,nl=0),
     "40\ub300 \uc678\ubc8c\uc774": dict(age=42,retire=60,life=85,infl=2.5,da=5000,dr=2.83,sa=5000,sr=10.0,
-        rea=40000,rr=2.5,oa=1000,sal=450,si=0,pen=90,ps=65,fc=150,vc=100,svr=20.0,nl=1,
+        rea=40000,rr=2.5,oa=1000,sal=450,si=0,pen=90,ps=65,fc=150,vc=100,nl=1,
         la0=25000,lr0=LOAN_RATE,ly0=22),
     "40\ub300 \ub9de\ubc8c\uc774": dict(age=42,retire=58,life=85,infl=2.5,da=8000,dr=2.83,sa=12000,sr=10.0,
-        rea=60000,rr=2.5,oa=2000,sal=700,si=50,pen=120,ps=65,fc=200,vc=150,svr=25.0,nl=1,
+        rea=60000,rr=2.5,oa=2000,sal=700,si=50,pen=120,ps=65,fc=200,vc=150,nl=1,
         la0=35000,lr0=LOAN_RATE,ly0=25),
     "50\ub300 \ub178\ud6c4\uc900\ube44": dict(age=52,retire=60,life=88,infl=2.5,da=15000,dr=2.83,sa=20000,sr=10.0,
-        rea=70000,rr=2.5,oa=5000,sal=500,si=0,pen=130,ps=65,fc=150,vc=100,svr=30.0,nl=1,
+        rea=70000,rr=2.5,oa=5000,sal=500,si=0,pen=130,ps=65,fc=150,vc=100,nl=1,
         la0=8000,lr0=3.5,ly0=8),
 }
 
@@ -138,7 +138,6 @@ def main():
         st.info(f"\U0001f4cc \ubb3c\uac00\uc0c1\uc2b9\ub960 {inflation_rate}%: \ubcc0\ub3d9\ube44 100% \xb7 \uace0\uc815\ube44 50%")
         fixed_cost = amt_s("\uc6d4 \uace0\uc815\ube44 (\ub9cc\uc6d0) \u2014 \uc8fc\uac70\xb7\ubcf4\ud5d8\xb7\uad50\uc721","fc",D_FC)
         variable_cost = amt_s("\uc6d4 \ubcc0\ub3d9\ube44 (\ub9cc\uc6d0) \u2014 \uc2dd\ube44\xb7\uad50\ud1b5\xb7\uc5ec\uac00","vc",D_VC)
-        savings_rate = st.number_input("\uc800\ucd95\ub960 (%)",min_value=0.0,max_value=100.0,value=_v("svr",D_SVR),step=5.0,key="svr")
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
         st.subheader("\U0001f3e0 \ub300\ucd9c")
         num_loans = st.number_input("\ub300\ucd9c \uac74\uc218",min_value=0,max_value=5,value=_v("nl",D_NL),key="nl")
@@ -157,7 +156,7 @@ def main():
                       other_assets=other_assets,salary=salary,side_income=side_income,
                       pension_monthly=pension,pension_start_age=pension_start,
                       fixed_cost=fixed_cost,variable_cost=variable_cost,
-                      savings_rate=savings_rate,loans=loans,retire_income=retire_income)
+                      loans=loans,retire_income=retire_income)
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
