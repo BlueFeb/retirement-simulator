@@ -126,7 +126,7 @@ def run_simulation(p, override=None):
                     nw = nw + m_inc_now - m_exp_now
 
     else:
-        # ━━ 상세 모드 — 월 단위로 전환 (#16) ━━
+        # ━━ 상세 모드 — 월 단위 ━━
         dep = _safe_float(params.get("deposit_amount", 0))
         stk = _safe_float(params.get("stock_amount", 0))
         re_ = _safe_float(params.get("real_estate_amount", 0))
@@ -135,9 +135,13 @@ def run_simulation(p, override=None):
         sR_ann = _safe_float(params.get("stock_return", 10)) / 100
         rR_ann = _safe_float(params.get("real_estate_return", 2.5)) / 100
 
-        if "avg_return" in params:
-            unified = _safe_float(params["avg_return"]) / 100
-            dR_ann = unified; sR_ann = unified; rR_ann = unified
+        # 수익률 시나리오: 각 자산 수익률을 override 값과 비교해서 높은 쪽 적용
+        has_override = "avg_return" in params
+        if has_override:
+            ov = _safe_float(params["avg_return"]) / 100
+            dR_ann = max(dR_ann, ov)
+            sR_ann = max(sR_ann, ov)
+            rR_ann = max(rR_ann, ov)
 
         # 월 복리 수익률
         dR_m = (1 + dR_ann) ** (1/12) - 1
@@ -150,7 +154,6 @@ def run_simulation(p, override=None):
         penS = _safe_int(params.get("pension_start_age", 65))
         mFix = _safe_float(params.get("fixed_cost", 0))
         mVar = _safe_float(params.get("variable_cost", 0))
-        # 은퇴 후 부분 소득 (#14)
         m_retire_inc = _safe_float(params.get("retire_income", 0))
 
         ls = _init_loans(params.get("loans"))
@@ -168,12 +171,10 @@ def run_simulation(p, override=None):
                           "real_estate":round(re_), "loan":round(tl),
                           "avg_peer":interp_nw(y, gender)})
 
-            # 월별 계산 — 물가상승 반영
-            # 지출: 변동비 물가 100%, 고정비 물가 50%
+            # 월별 계산
             m_var_now = mVar * ((1 + infl) ** el)
             m_fix_now = mFix * ((1 + infl * 0.5) ** el)
             m_exp_now = m_var_now + m_fix_now
-            # 수입: 급여+부수입 물가의 70% 인상, 연금 물가 100% 연동, 은퇴후소득 물가 50%
             if y < retire:
                 m_inc_now = (mSal + mSide) * ((1 + infl * 0.7) ** el)
             else:
@@ -182,16 +183,15 @@ def run_simulation(p, override=None):
             m_loan_pay = sum(l["mp"] for l in ls if l["bal"] > 0)
 
             for _ in range(12):
-                # 자산별 월 수익
-                dep *= (1 + dR_m)
-                stk *= (1 + sR_m)
-                re_ *= (1 + rR_m)
+                # 자산별 월 수익 (양수일 때만)
+                if dep > 0: dep *= (1 + dR_m)
+                if stk > 0: stk *= (1 + sR_m)
+                if re_ > 0: re_ *= (1 + rR_m)
 
                 # 월 순현금흐름
                 ncf = m_inc_now + m_pen_now - m_exp_now - m_loan_pay
 
                 if ncf > 0:
-                    # 잉여금 전액 저축: 예금 40% + 주식 60%
                     dep += ncf * 0.4
                     stk += ncf * 0.6
                 else:
