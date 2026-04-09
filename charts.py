@@ -14,7 +14,7 @@ def _get_colors(dark_mode):
             "red":"#dc2626","gray":"#64748b","indigo_fill":"rgba(79,70,229,0.08)","yellow_fill":"rgba(217,119,6,0.05)"}
 
 SCENARIO_STYLES = {
-    "현재 계획 (은행이자)": {"color_key":"indigo","dash":"solid","width":3,"fill":True},
+    "현재 계획 (은행이자)": {"color_key":"indigo","dash":"solid","width":3,"fill":False},
     "동연령 평균":          {"color_key":"yellow","dash":"dot","width":2,"fill":False},
     "저축 강화":            {"color_key":"green","dash":"dash","width":2,"fill":False},
     "은퇴 3년 연장":        {"color_key":"gray","dash":"dot","width":2,"fill":False},
