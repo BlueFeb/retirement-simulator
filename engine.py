@@ -119,7 +119,11 @@ def run_simulation(p, override=None):
             else:
                 m_inc_now = m_retire_inc * ((1 + infl * 0.5) ** el)
             for _ in range(12):
-                nw = nw * (1 + monthly_ret) + m_inc_now - m_exp_now
+                # 수익률은 양수 자산에만 적용 (마이너스면 수익 없음)
+                if nw > 0:
+                    nw = nw * (1 + monthly_ret) + m_inc_now - m_exp_now
+                else:
+                    nw = nw + m_inc_now - m_exp_now
 
     else:
         # ━━ 상세 모드 — 월 단위로 전환 (#16) ━━
