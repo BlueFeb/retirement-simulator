@@ -26,10 +26,30 @@ def get_gsheet_connection():
         creds_dict = dict(st.secrets["gcp_service_account"])
 
         # 필수 키 검증
-        required_keys = ["type", "project_id", "private_key", "client_email"]
+        required_keys = ["type", "project_id", "private_key", "client_email",
+                         "token_uri"]
         missing = [k for k in required_keys if k not in creds_dict]
         if missing:
             st.session_state["gsheet_error"] = f"secrets에 누락된 키: {', '.join(missing)}"
+            return None
+
+        # private_key 형식 검증
+        pk = creds_dict.get("private_key", "")
+        if "BEGIN PRIVATE KEY" not in pk:
+            st.session_state["gsheet_error"] = (
+                "private_key 형식 오류. "
+                "JSON 파일에서 private_key 값을 그대로 복사했는지 확인하세요. "
+                "-----BEGIN PRIVATE KEY----- 로 시작해야 합니다."
+            )
+            return None
+
+        # client_email 형식 검증
+        email = creds_dict.get("client_email", "")
+        if "@" not in email or ".iam.gserviceaccount.com" not in email:
+            st.session_state["gsheet_error"] = (
+                f"client_email 형식 오류: '{email[:30]}...'. "
+                "xxx@project-id.iam.gserviceaccount.com 형태여야 합니다."
+            )
             return None
 
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
@@ -38,11 +58,31 @@ def get_gsheet_connection():
         sheet_name = st.secrets["google_sheets"]["spreadsheet_name"]
         spreadsheet = client.open(sheet_name)
 
-        st.session_state["gsheet_error"] = None  # 성공 시 에러 초기화
+        st.session_state["gsheet_error"] = None
         return spreadsheet
 
     except Exception as e:
-        st.session_state["gsheet_error"] = f"연결 실패: {str(e)}"
+        err_str = str(e)
+        # 구체적인 에러 안내
+        if "invalid_grant" in err_str:
+            hint = (
+                "invalid_grant 에러 — 가능한 원인:\n"
+                "1. private_key를 복사할 때 \\n이 실제 줄바꿈으로 바뀌었을 수 있음\n"
+                "2. 서비스 계정이 삭제되었거나 비활성화됨\n"
+                "3. JSON 파일의 내용이 잘려서 들어감\n\n"
+                "해결법: GCP Console → 서비스 계정 → 키 탭에서 "
+                "새 JSON 키를 다시 생성하고 secrets에 다시 붙여넣기"
+            )
+            st.session_state["gsheet_error"] = hint
+        elif "not found" in err_str.lower() and "spreadsheet" in err_str.lower():
+            st.session_state["gsheet_error"] = (
+                f"스프레드시트를 찾을 수 없음. 이름이 정확히 "
+                f"'{st.secrets['google_sheets']['spreadsheet_name']}'인지, "
+                f"서비스 계정({creds_dict.get('client_email','?')})이 "
+                f"편집자로 공유되어 있는지 확인하세요."
+            )
+        else:
+            st.session_state["gsheet_error"] = f"연결 실패: {err_str}"
         return None
 
 
@@ -64,7 +104,7 @@ def save_to_gsheet(inputs, results):
                 "총자산","월수입","월지출",
                 "예금","예금%","주식","주식%","부동산","부동산%","기타",
                 "급여","부수입","연금","연금시작",
-                "고정비","변동비","저축률","물가상승률","대출JSON",
+                "고정비","변동비","(미사용)","물가상승률","대출JSON",
                 "고갈연도","고갈나이","최대자산","최대나이","순자산","평균",
                 "FIRE진행률","안전인출액","메모"]
             ws.update("A1", [headers])
@@ -105,7 +145,7 @@ def save_to_gsheet(inputs, results):
                 str(inputs.get("pension_start_age", "")),
                 str(inputs.get("fixed_cost", "")),
                 str(inputs.get("variable_cost", "")),
-                str(inputs.get("savings_rate", "")),
+                "",
                 str(inputs.get("inflation_rate", "")),
                 json.dumps(inputs.get("loans", []), ensure_ascii=False)
             ]
