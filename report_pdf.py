@@ -1,5 +1,5 @@
 """
-PDF 보고서 — CID 한글 폰트 + matplotlib 차트 이미지
+PDF 보고서 — CID 한글 폰트 + matplotlib 차트 이미지 + 조언 포함
 """
 import io
 from datetime import datetime
@@ -23,12 +23,15 @@ FONT = "HYGothic-Medium"
 INDIGO=HexColor("#4338ca"); GREEN=HexColor("#059669")
 RED=HexColor("#dc2626"); GRAY=HexColor("#64748b")
 LIGHT=HexColor("#f1f5f9"); WHITE=HexColor("#ffffff"); BORDER=HexColor("#cbd5e1"); DARK=HexColor("#1e293b")
+ADVICE_BG=HexColor("#f0f0ff"); ADVICE_BORDER=HexColor("#6366f1")
 
 S_TITLE = ParagraphStyle("t",fontName=FONT,fontSize=18,leading=26,textColor=INDIGO,alignment=TA_CENTER,spaceAfter=3*mm)
 S_SUB   = ParagraphStyle("s",fontName=FONT,fontSize=9,leading=13,textColor=GRAY,alignment=TA_CENTER,spaceAfter=6*mm)
 S_H2    = ParagraphStyle("h",fontName=FONT,fontSize=12,leading=17,textColor=INDIGO,spaceBefore=6*mm,spaceAfter=3*mm)
 S_BODY  = ParagraphStyle("b",fontName=FONT,fontSize=9,leading=14,textColor=DARK,spaceAfter=2*mm)
 S_FOOT  = ParagraphStyle("f",fontName=FONT,fontSize=7.5,leading=11,textColor=GRAY,alignment=TA_CENTER,spaceBefore=4*mm)
+S_ADVICE_TITLE = ParagraphStyle("at",fontName=FONT,fontSize=10,leading=15,textColor=INDIGO,spaceAfter=1*mm)
+S_ADVICE_BODY  = ParagraphStyle("ab",fontName=FONT,fontSize=8.5,leading=13,textColor=DARK,spaceAfter=2*mm)
 
 def _bts():
     return [("FONTNAME",(0,0),(-1,-1),FONT),("FONTSIZE",(0,0),(-1,-1),9),
@@ -37,16 +40,18 @@ def _bts():
             ("TOPPADDING",(0,0),(-1,-1),2.5*mm),("BOTTOMPADDING",(0,0),(-1,-1),2.5*mm),
             ("LEFTPADDING",(0,0),(-1,-1),2*mm)]
 
-def _add_img(el, img_bytes, w_mm=160):
+def _add_img(el, img_bytes, w_mm=160, aspect=0.57):
+    """차트 이미지 추가. aspect로 가로:세로 비율 조정."""
     if img_bytes:
-        img = Image(io.BytesIO(img_bytes), width=w_mm*mm, height=w_mm*mm*0.5)
+        img = Image(io.BytesIO(img_bytes), width=w_mm*mm, height=w_mm*mm*aspect)
         el.append(img)
         el.append(Spacer(1, 3*mm))
 
 
 def generate_pdf_report(df, params, dep_info, peak_info, current_info,
-                         chart_images=None):
+                         chart_images=None, advice_tips=None):
     chart_images = chart_images or {}
+    advice_tips = advice_tips or []
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf,pagesize=A4,leftMargin=18*mm,rightMargin=18*mm,
                             topMargin=18*mm,bottomMargin=18*mm)
@@ -78,12 +83,12 @@ def generate_pdf_report(df, params, dep_info, peak_info, current_info,
     # 파이 차트
     if chart_images.get("pie"):
         el.append(Paragraph("현재 자산 구성", S_H2))
-        _add_img(el, chart_images["pie"], 110)
+        _add_img(el, chart_images["pie"], 110, 0.6)
 
-    # 메인 차트
+    # 메인 차트 — 비율 수정
     if chart_images.get("main"):
-        el.append(Paragraph("순자산 추이", S_H2))
-        _add_img(el, chart_images["main"])
+        el.append(Paragraph("순자산 추이 & 시나리오 비교", S_H2))
+        _add_img(el, chart_images["main"], 160, 0.57)
 
     # 주요 시점 테이블
     el.append(Paragraph("주요 시점별 자산", S_H2))
@@ -102,23 +107,42 @@ def generate_pdf_report(df, params, dep_info, peak_info, current_info,
     mt=Table(md,colWidths=[27*mm,18*mm,38*mm,38*mm,38*mm])
     mt.setStyle(TableStyle(ms)); el.append(mt)
 
+    # ━━ 맞춤형 조언 ━━
+    if advice_tips:
+        el.append(PageBreak())
+        el.append(Paragraph("맞춤형 조언", S_H2))
+        for tip in advice_tips:
+            icon = tip.get("icon", "")
+            title = tip.get("title", "")
+            body = tip.get("body", "")
+            # 조언 카드 테이블
+            card_data = [[Paragraph(f"{icon} {title}", S_ADVICE_TITLE)],
+                         [Paragraph(body, S_ADVICE_BODY)]]
+            card = Table(card_data, colWidths=[160*mm])
+            card.setStyle(TableStyle([
+                ("FONTNAME",(0,0),(-1,-1),FONT),
+                ("BACKGROUND",(0,0),(-1,-1),ADVICE_BG),
+                ("BOX",(0,0),(-1,-1),1,ADVICE_BORDER),
+                ("LEFTPADDING",(0,0),(-1,-1),4*mm),
+                ("RIGHTPADDING",(0,0),(-1,-1),4*mm),
+                ("TOPPADDING",(0,0),(0,0),3*mm),
+                ("BOTTOMPADDING",(-1,-1),(-1,-1),3*mm),
+            ]))
+            el.append(card)
+            el.append(Spacer(1, 2*mm))
+
     # 페이지 브레이크 + 추가 차트들
-    has_extra = any(chart_images.get(k) for k in ["composition","cashflow","scenarios","sensitivity"])
+    has_extra = any(chart_images.get(k) for k in ["composition","sensitivity"])
     if has_extra:
         el.append(PageBreak())
 
     if chart_images.get("composition"):
         el.append(Paragraph("자산 구성 변화", S_H2))
-        _add_img(el, chart_images["composition"])
-
-    if chart_images.get("scenarios"):
-        el.append(Paragraph("시나리오 비교", S_H2))
-        el.append(Paragraph("① 현재 계획  ② 저축 강화  ③ 은퇴 3년 연장", S_BODY))
-        _add_img(el, chart_images["scenarios"])
+        _add_img(el, chart_images["composition"], 160, 0.43)
 
     if chart_images.get("sensitivity"):
         el.append(Paragraph("민감도 분석 (낙관 / 기본 / 비관)", S_H2))
-        _add_img(el, chart_images["sensitivity"])
+        _add_img(el, chart_images["sensitivity"], 160, 0.43)
 
     # 입력 조건
     el.append(Paragraph("입력 조건", S_H2))
@@ -127,6 +151,7 @@ def generate_pdf_report(df, params, dep_info, peak_info, current_info,
             ["총 자산",f"{params.get('total_savings',0):,.0f}만원"],
             ["월 수입",f"{params.get('monthly_income',0):,.0f}만원"],
             ["월 지출",f"{params.get('monthly_expense',0):,.0f}만원"],
+            ["은퇴후 소득",f"{params.get('retire_income',0):,.0f}만원/월"],
             ["물가상승률",f"{params.get('inflation_rate',0)}%"]]
     else:
         cd=[["항목","값"],
@@ -135,6 +160,7 @@ def generate_pdf_report(df, params, dep_info, peak_info, current_info,
             ["부동산",f"{params.get('real_estate_amount',0):,.0f}만원 ({params.get('real_estate_return',0)}%)"],
             ["급여",f"{params.get('salary',0):,.0f}만원/월"],
             ["연금",f"{params.get('pension_monthly',0):,.0f}만원/월 ({params.get('pension_start_age',65)}세~)"],
+            ["은퇴후 소득",f"{params.get('retire_income',0):,.0f}만원/월"],
             ["고정비",f"{params.get('fixed_cost',0):,.0f}만원 (물가50%)"],
             ["변동비",f"{params.get('variable_cost',0):,.0f}만원 (물가100%)"],
             ["물가상승률",f"{params.get('inflation_rate',0)}%"]]
