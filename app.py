@@ -132,6 +132,7 @@ def main():
         side_income = amt_s("\ubd80\uc218\uc785 (\ub9cc\uc6d0/\uc6d4)","si",D_SI)
         pension = amt_s("\uad6d\ubbfc\uc5f0\uae08 \uc608\uc0c1 (\ub9cc\uc6d0/\uc6d4)","pen",D_PEN,5)
         pension_start = st.number_input("\uc5f0\uae08 \uc2dc\uc791 \ub098\uc774",min_value=55,max_value=80,value=_v("ps",D_PS),key="ps")
+        retire_income = amt_s("은퇴 후 월 소득 (만원)", "ri", 0, 10, "파트타임, 임대 수입 등")
         st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
         st.subheader("\U0001f4b8 \uc9c0\ucd9c")
         st.info(f"\U0001f4cc \ubb3c\uac00\uc0c1\uc2b9\ub960 {inflation_rate}%: \ubcc0\ub3d9\ube44 100% \xb7 \uace0\uc815\ube44 50%")
